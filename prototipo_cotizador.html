@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tailwind · Clasificador Arancelario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wdth,wght@0,75..100,300..800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#152034; --navy2:#0D1521; --gold:#DFB56A; --gold-deep:#B8862F; --burg:#7E2432;
+    --paper:#F2EDE3; --ivory:#FBF9F5; --ink:#152034;
+    --muted:rgba(21,32,52,.62); --faint:rgba(21,32,52,.42);
+    --line:rgba(21,32,52,.13); --goldline:rgba(223,181,106,.6);
+    --r-sm:2px; --r-md:4px; --r-lg:8px;
+    --sh:0 1px 2px rgba(21,32,52,.07),0 2px 6px rgba(21,32,52,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:34px 22px 64px}
+  .disp{font-family:'Open Sans',sans-serif;font-stretch:78%;text-transform:uppercase;font-weight:800;letter-spacing:.06em}
+  .eyebrow{font-family:'Open Sans',sans-serif;text-transform:uppercase;font-weight:600;letter-spacing:.24em;font-size:11px;color:var(--gold-deep)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  .row{display:flex;align-items:center}.between{justify-content:space-between}
+  .wrapf{flex-wrap:wrap}.gap8{gap:8px}.gap12{gap:12px}.gap16{gap:16px}.gap24{gap:24px}
+  .hidden{display:none!important}
+
+  /* topbar */
+  .topbar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--goldline);padding-bottom:20px;margin-bottom:34px}
+  .logo{display:flex;align-items:center;gap:13px}
+  .logoimg{height:46px;width:auto;display:block}
+  .logofb{display:flex;align-items:center;gap:13px}
+  .mk{width:38px;height:38px;position:relative;transform:rotate(45deg);background:var(--navy);border:1.5px solid var(--gold)}
+  .mk:before{content:"";position:absolute;inset:6px;background:var(--gold)}
+  .mk:after{content:"";position:absolute;left:6px;top:6px;width:12px;height:12px;background:var(--burg)}
+  .logo .nm{font-family:'Open Sans',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.14em;font-size:15px;line-height:1.1}
+  .logo .sb{font-family:'Open Sans',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.22em;font-size:9px;color:var(--gold)}
+  .lang button{padding:7px 13px;font-family:'Open Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);margin-left:7px;background:var(--ivory)}
+  .lang button.on{background:var(--navy);color:var(--gold);border-color:var(--navy)}
+
+  h1{font-family:'Open Sans',sans-serif;font-stretch:78%;text-transform:uppercase;font-weight:800;letter-spacing:.05em;font-size:42px;line-height:1.0;margin:14px 0 12px}
+  .lead{color:var(--muted);font-weight:500;max-width:640px;font-size:15px}
+  .goldrule{height:1px;background:var(--goldline);margin:22px 0}
+
+  .demo{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:600;color:var(--burg);background:rgba(124,46,56,.06);border:1px solid rgba(124,46,56,.25);padding:9px 15px;margin-bottom:26px;letter-spacing:.01em}
+  .demo .d{width:6px;height:6px;background:var(--burg);transform:rotate(45deg);flex:none}
+
+  .grid{display:grid;grid-template-columns:1.9fr 1fr;gap:26px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}h1{font-size:30px}}
+
+  .card{background:var(--ivory);border:1px solid var(--line);border-radius:var(--r-md);padding:28px;box-shadow:var(--sh)}
+  .card.navy{background:var(--navy);border-color:var(--navy)}
+  .sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}
+  .sec-h .n{font-family:'Open Sans',sans-serif;font-weight:800;color:var(--gold);font-size:15px;letter-spacing:.05em}
+  .sec-h h2{font-family:'Open Sans',sans-serif;text-transform:uppercase;font-weight:800;letter-spacing:.05em;font-size:15px}
+  .hint{font-size:14px;color:var(--muted);margin-bottom:18px}
+
+  textarea{width:100%;height:130px;resize:none;padding:16px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-sm);font-family:inherit;font-size:15px;color:var(--ink);outline:none;transition:.15s;margin-bottom:14px}
+  textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(184,150,90,.18)}
+  textarea::placeholder{color:var(--faint)}
+
+  .pdfbtn{display:inline-flex;align-items:center;gap:8px;font-family:'Open Sans',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);background:transparent;border:1px solid var(--navy);padding:10px 16px;transition:.15s}
+  .pdfbtn:hover{background:var(--navy);color:var(--gold)}
+  .pdfname{font-size:12px;font-weight:600;color:var(--burg);display:inline-flex;align-items:center;gap:6px}
+  .drophint{font-size:12px;color:var(--faint)}
+  .dropzone{position:relative;transition:.15s}
+  .dropoverlay{display:none;position:absolute;inset:-2px;border:2px dashed var(--gold);background:rgba(223,181,106,.1);align-items:center;justify-content:center;font-family:'Open Sans',sans-serif;text-transform:uppercase;letter-spacing:.12em;font-size:12px;font-weight:700;color:var(--gold-deep);pointer-events:none;z-index:2}
+  .dropzone.drag .dropoverlay{display:flex}
+
+  .go{width:100%;background:var(--navy);color:var(--gold);font-family:'Open Sans',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:16px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:10px;transition:.15s;margin-top:16px;border:1px solid var(--navy);border-radius:var(--r-sm)}
+  .go:hover:not(:disabled){background:var(--navy2)}
+  .go:disabled{opacity:.45;cursor:not-allowed}
+
+  .ex{margin-top:18px;display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+  .ex .lbl{font-family:'Open Sans',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
+  .ex button{font-size:12px;font-weight:500;color:var(--navy);background:var(--paper);border:1px solid var(--line);padding:7px 12px;transition:.15s}
+  .ex button:hover{border-color:var(--gold);color:var(--burg)}
+
+  /* questions */
+  .qbox{background:var(--ivory);border:1px solid var(--goldline);border-left:3px solid var(--gold);padding:28px;margin-top:26px}
+  .qbox .qh{margin-bottom:6px}
+  .qbox h3{font-family:'Open Sans',sans-serif;text-transform:uppercase;font-weight:800;letter-spacing:.04em;font-size:17px}
+  .qref{font-size:14px;background:var(--paper);border:1px solid var(--line);padding:13px;color:var(--muted);margin:12px 0 20px}
+  .qref b{color:var(--burg)}
+  .qbox label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:7px}
+  .qbox input{width:100%;padding:13px;border:1px solid var(--line);background:var(--paper);font-family:inherit;font-size:14px;outline:none;margin-bottom:16px;transition:.15s}
+  .qbox input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(184,150,90,.18)}
+  .qsub{background:var(--burg);color:#fff;font-family:'Open Sans',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.09em;font-size:12px;padding:13px 30px;transition:.15s}
+  .qsub:hover{filter:brightness(1.1)}
+
+  /* results */
+  .stack>*+*{margin-top:22px}
+  .sim{background:var(--navy);border:1px solid var(--navy);border-radius:var(--r-md);padding:32px;position:relative;box-shadow:var(--sh)}
+  .sim:before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:linear-gradient(90deg,var(--gold),var(--burg))}
+  .sim .kk{color:var(--gold);font-family:'Open Sans',sans-serif;text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:700;margin-bottom:14px}
+  .sim .code{color:#fff;font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:34px;letter-spacing:.01em;margin-bottom:14px}
+  .sim p{color:rgba(255,255,255,.75);font-weight:400;font-size:17px;max-width:640px}
+  @media(max-width:520px){.sim .code{font-size:25px}}
+
+  .tariffs{display:flex;gap:0;border:1px solid var(--line)}
+  @media(max-width:520px){.tariffs{flex-direction:column}}
+  .tf{flex:1;padding:20px;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+  .tf:last-child{border-right:none}
+  @media(max-width:520px){.tf{border-right:none;border-bottom:1px solid var(--line)}.tf:last-child{border-bottom:none}}
+  .tf .k{font-family:'Open Sans',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-bottom:10px}
+  .tf .v{font-family:'Open Sans',sans-serif;font-weight:800;font-size:30px}
+
+  .hs-line{display:flex;align-items:flex-start;gap:14px;margin-bottom:15px}
+  .badge{font-family:'Open Sans',sans-serif;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:4px 9px;margin-top:3px;white-space:nowrap;border-radius:999px}
+  .badge.sug{background:var(--gold);color:var(--navy)}
+  .badge.alt{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .hs-code{font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:19px}
+  .hs-desc{font-size:14px;color:var(--muted)}
+  .hs-alts{border-top:1px solid var(--goldline);padding-top:16px;display:flex;flex-direction:column;gap:13px}
+
+  .simalt-code{font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:18px;background:var(--navy);color:#fff;padding:12px 16px;display:inline-block}
+  .kv{font-size:14px}.kv b{font-family:'Open Sans',sans-serif;font-weight:800}
+  .kv .die{color:var(--navy)}.kv .te{color:var(--gold)}.kv .iva{color:var(--burg)}
+
+  /* history */
+  .hist{position:sticky;top:24px;display:flex;flex-direction:column;max-height:86vh;padding:0}
+  .hist .hh{padding:18px 22px;border-bottom:1px solid var(--goldline);display:flex;justify-content:space-between;align-items:center}
+  .hist .hh h3{font-family:'Open Sans',sans-serif;text-transform:uppercase;font-weight:800;letter-spacing:.06em;font-size:13px;display:flex;align-items:center;gap:9px}
+  .hist .hh .dot{width:7px;height:7px;background:var(--gold);transform:rotate(45deg)}
+  .hclear{padding:7px 10px;font-family:'Open Sans',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);transition:.15s}
+  .hclear:hover{color:var(--burg)}
+  .hlist{padding:10px;overflow-y:auto;flex:1}
+  .hlist::-webkit-scrollbar{width:0}
+  .empty{text-align:center;padding:34px 20px;color:var(--faint);font-size:13px}
+  .hitem{padding:14px;border:1px solid transparent;border-bottom:1px solid var(--line);transition:.15s}
+  .hitem:last-child{border-bottom:1px solid transparent}
+  .hitem:hover{background:var(--paper);border-color:var(--line)}
+  .hitem .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .hitem .dt{font-size:11px;color:var(--faint);font-family:ui-monospace,Menlo,monospace}
+  .hitem .hs{font-family:'Open Sans',sans-serif;font-size:9px;font-weight:700;color:var(--gold);letter-spacing:.06em;text-transform:uppercase}
+  .hitem .txt{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:9px;line-height:1.4}
+  .hitem .box{background:var(--navy);padding:11px 12px}
+  .hitem .box .kk{font-family:'Open Sans',sans-serif;font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+  .hitem .box .cc{font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:13px;color:#fff;margin-bottom:7px}
+  .hitem .box .mm{display:flex;gap:18px;font-size:11px;color:rgba(255,255,255,.6);font-family:'Open Sans',sans-serif;font-weight:600;letter-spacing:.04em}
+  .hitem .box .mm b{color:var(--gold)}
+
+  footer{margin-top:56px;border-top:1px solid var(--goldline);padding-top:22px;text-align:center}
+  footer .d1{font-size:13px;color:var(--muted);font-weight:500}
+  footer .d2{font-size:11px;color:var(--faint);margin-top:5px}
+
+  .fade{animation:fade .4s ease-out both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .spin{animation:spin 1s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="logo">
+      <img src="tailwind-logo.png" alt="Tailwind Global Commerce" class="logoimg" onerror="this.style.display='none';document.getElementById('logofb').style.display='flex';">
+      <div id="logofb" class="logofb" style="display:none">
+        <div class="mk"></div>
+        <div><div class="nm">Tailwind</div><div class="sb">Global Commerce</div></div>
+      </div>
+    </div>
+    <div class="lang">
+      <button id="es" class="on" onclick="setLang('es')">ES</button>
+      <button id="en" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
+
+  <div class="eyebrow">01 · <span data-t="brandTag"></span></div>
+  <h1 data-t="h1"></h1>
+  <p class="lead" data-t="subtitle"></p>
+  <div class="goldrule"></div>
+  <div class="demo"><span class="d"></span><span data-t="demo"></span></div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="sec-h"><span class="n">02</span><h2 data-t="inputTitle"></h2></div>
+        <p class="hint" data-t="hintText"></p>
+        <div id="dropzone" class="dropzone">
+          <textarea id="input" data-tp="placeholder"></textarea>
+          <div class="row wrapf gap16">
+            <input id="file" type="file" accept="application/pdf" class="hidden" onchange="onPdf(event)">
+            <button class="pdfbtn" onclick="document.getElementById('file').click()">＋ <span data-t="dropPdf"></span></button>
+            <span class="drophint" data-t="dropHint"></span>
+            <span id="pdfname" class="pdfname hidden"></span>
+          </div>
+          <div class="dropoverlay"><span data-t="dropNow"></span></div>
+        </div>
+        <button id="go" class="go" onclick="analyze()"><span id="goic"></span><span id="gotxt" data-t="analyze"></span></button>
+        <div class="ex">
+          <span class="lbl" data-t="tryExamples"></span>
+          <span id="examples"></span>
+        </div>
+      </div>
+
+      <div id="questions" class="qbox fade hidden">
+        <div class="sec-h qh"><span class="n">✳</span><h3 data-t="qTitle"></h3></div>
+        <p class="hint" data-t="qLead" style="margin-bottom:0"></p>
+        <div class="qref"><b data-t="reference"></b> <span id="qref"></span></div>
+        <form id="qform" onsubmit="submitAnswers(event)">
+          <div id="qfields"></div>
+          <button type="submit" class="qsub" data-t="submit"></button>
+        </form>
+      </div>
+
+      <div id="results" class="stack hidden"></div>
+    </div>
+
+    <div>
+      <div class="card hist">
+        <div class="hh">
+          <h3><span class="dot"></span><span data-t="histTitle"></span></h3>
+          <button id="hclear" class="hclear hidden" onclick="clearHist()" data-t="clear"></button>
+        </div>
+        <div id="hlist" class="hlist"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p class="d1" data-t="disclaimer"></p>
+    <p class="d2" data-t="adminNote"></p>
+  </footer>
+</div>
+
+<script>
+var T={
+ es:{brandTag:"Clasificador Arancelario",h1:"Clasificá tu producto en segundos",
+   subtitle:"Sugerí la posición SIM argentina y sus costos de importación a partir de un producto.",
+   demo:"Datos de ejemplo — versión de demostración. Los valores reales saldrán de la base oficial + Gemini.",
+   inputTitle:"Ingresá el producto",hintText:"Pegá un link, una descripción, o el nombre y modelo. También podés subir una ficha técnica en PDF.",
+   placeholder:"ej: 'Botella térmica de acero inoxidable, 500ml, doble pared' — o pegá un link de producto…",
+   dropPdf:"Subir PDF",dropHint:"o arrastrá el PDF aquí",dropNow:"Soltá el PDF",pdfLoaded:"PDF:",analyze:"Analizar producto",loading:"Analizando…",tryExamples:"Ejemplos:",
+   qTitle:"Necesito un par de datos más",qLead:"Respondé para poder definir la posición exacta:",
+   reference:"Referencia encontrada:",submit:"Enviar respuestas",clear:"Limpiar",
+   simTitle:"Posición SIM sugerida",tariffs:"Aranceles e impuestos",die:"Arancel (DIE)",te:"Tasa Estadística",iva:"IVA",
+   hsTitle:"Clasificación internacional (HS)",suggested:"Sugerido",alt:"Alternativa",simAltTitle:"Posición SIM alternativa",
+   histTitle:"Últimas búsquedas",noHist:"Aún no hay búsquedas.",
+   disclaimer:"Información orientativa. Los valores definitivos deben confirmarse con un despachante de aduana.",
+   adminNote:"El prompt de Gemini será editable desde un panel de administración (ver spec)."},
+ en:{brandTag:"Tariff Classifier",h1:"Classify your product in seconds",
+   subtitle:"Suggest the Argentine SIM position and its import costs from a product.",
+   demo:"Sample data — demo version. Real values will come from the official database + Gemini.",
+   inputTitle:"Enter the product",hintText:"Paste a link, a description, or the name and model. You can also upload a datasheet PDF.",
+   placeholder:"e.g. 'Insulated stainless steel water bottle, 500ml, double wall' — or paste a product link…",
+   dropPdf:"Upload PDF",dropHint:"or drag the PDF here",dropNow:"Drop the PDF",pdfLoaded:"PDF:",analyze:"Analyze product",loading:"Analyzing…",tryExamples:"Examples:",
+   qTitle:"I need a couple more details",qLead:"Answer these to define the exact position:",
+   reference:"Reference found:",submit:"Submit answers",clear:"Clear",
+   simTitle:"Suggested SIM position",tariffs:"Duties & taxes",die:"Duty (DIE)",te:"Statistics Tax",iva:"VAT",
+   hsTitle:"International classification (HS)",suggested:"Suggested",alt:"Alternative",simAltTitle:"Alternative SIM position",
+   histTitle:"Recent searches",noHist:"No searches yet.",
+   disclaimer:"For guidance only. Final values must be confirmed with a customs broker.",
+   adminNote:"The Gemini prompt will be editable from an admin panel (see spec)."}
+};
+
+var MOCK={
+ botella:{needsQuestions:true,
+   reference:"Se encontró 'botella térmica de acero inoxidable 500ml'. Falta confirmar si tiene sistema de vacío (doble pared) y si es de uso doméstico.",
+   questions:["¿Tiene aislamiento al vacío / doble pared?","¿Es de uso doméstico o para camping/deportivo?"],
+   result:{hs:{suggested:{code:"9617.00",desc:"Termos y demás recipientes isotérmicos, montados, con aislamiento por vacío."},
+     alts:[{code:"7323.93",desc:"Artículos de uso doméstico de acero inoxidable."},{code:"3924.10",desc:"Artículos de plástico para uso doméstico (variante con cuerpo plástico)."}]},
+     sim:{code:"9617.00.10.100 W",desc:"Termos y recipientes isotérmicos con aislamiento por vacío, capacidad ≤ 0,75 L.",die:"20%",te:"3%",iva:"21%"},
+     simAlt:{code:"7323.93.00.900 X",desc:"Artículos de uso doméstico de acero inoxidable, los demás.",die:"18%",te:"3%",iva:"21%"}}},
+ notebook:{needsQuestions:false,
+   result:{hs:{suggested:{code:"8471.30",desc:"Máquinas automáticas de tratamiento de datos, portátiles, ≤ 10 kg."},
+     alts:[{code:"8471.41",desc:"Las demás máquinas de tratamiento de datos que incluyan CPU y unidad de E/S."},{code:"8471.49",desc:"Las demás, presentadas en forma de sistemas."}]},
+     sim:{code:"8471.30.12.000 P",desc:"Máquinas portátiles de tratamiento de datos, peso ≤ 10 kg, con pantalla.",die:"0%",te:"3%",iva:"21%"},
+     simAlt:{code:"8471.30.19.000 R",desc:"Las demás máquinas portátiles de tratamiento de datos.",die:"0%",te:"3%",iva:"21%"}}},
+ def:{needsQuestions:false,
+   result:{hs:{suggested:{code:"3926.90",desc:"Las demás manufacturas de plástico."},
+     alts:[{code:"3924.90",desc:"Los demás artículos de uso doméstico de plástico."},{code:"3926.40",desc:"Estatuillas y demás artículos de adorno de plástico."}]},
+     sim:{code:"3926.90.90.900 V",desc:"Las demás manufacturas de plástico, los demás.",die:"18%",te:"3%",iva:"21%"},
+     simAlt:{code:"3924.90.00.000 T",desc:"Los demás artículos de uso doméstico y de higiene de plástico.",die:"18%",te:"3%",iva:"21%"}}}
+};
+function classify(s){s=(s||'').toLowerCase();
+ if(s.indexOf('botella')>=0||s.indexOf('term')>=0||s.indexOf('bottle')>=0)return MOCK.botella;
+ if(s.indexOf('notebook')>=0||s.indexOf('laptop')>=0||s.indexOf('macbook')>=0)return MOCK.notebook;
+ return MOCK.def;}
+
+var lang='es',pdf=null,pending=null,history=[];
+function t(){return T[lang];}
+function applyText(){var d=t();
+ document.querySelectorAll('[data-t]').forEach(function(el){el.textContent=d[el.getAttribute('data-t')]||'';});
+ document.getElementById('input').setAttribute('placeholder',d.placeholder);
+ renderExamples();renderHist();}
+function setLang(l){lang=l;document.getElementById('es').className=l==='es'?'on':'';document.getElementById('en').className=l==='en'?'on':'';applyText();}
+
+function renderExamples(){
+ var ex=lang==='es'?["Botella térmica de acero inoxidable 500ml","Notebook 14 pulgadas 16GB RAM","https://ejemplo.com/silla-diseño"]
+   :["Insulated stainless steel bottle 500ml","14-inch notebook 16GB RAM","https://example.com/design-chair"];
+ var h='';ex.forEach(function(e){var l=e.length>32?e.slice(0,30)+'…':e;h+='<button onclick="setInput(this.getAttribute(\'data-v\'))" data-v="'+e.replace(/"/g,'&quot;')+'">'+l+'</button>';});
+ document.getElementById('examples').innerHTML=h;}
+function setInput(v){document.getElementById('input').value=v;pdf=null;document.getElementById('pdfname').className='pdfname hidden';}
+function setPdf(name){pdf=name;var el=document.getElementById('pdfname');el.textContent='◆ '+t().pdfLoaded+' '+name;el.className='pdfname';}
+function onPdf(e){var f=e.target.files[0];if(f)setPdf(f.name);}
+function setupDrop(){
+ var dz=document.getElementById('dropzone');
+ ['dragenter','dragover'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();e.stopPropagation();dz.classList.add('drag');});});
+ ['dragleave','dragend'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();e.stopPropagation();dz.classList.remove('drag');});});
+ dz.addEventListener('drop',function(e){e.preventDefault();e.stopPropagation();dz.classList.remove('drag');
+   var files=e.dataTransfer&&e.dataTransfer.files;if(!files||!files.length)return;
+   var f=files[0];
+   if(f.type==='application/pdf'||/\.pdf$/i.test(f.name)){setPdf(f.name);}
+   else{alert(lang==='es'?'Por ahora solo se aceptan archivos PDF.':'Only PDF files are accepted for now.');}
+ });
+ // evitar que el navegador abra el archivo si se suelta fuera de la zona
+ ['dragover','drop'].forEach(function(ev){window.addEventListener(ev,function(e){if(!dz.contains(e.target)){e.preventDefault();}});});
+}
+
+function setLoading(on){var b=document.getElementById('go');b.disabled=on;
+ document.getElementById('goic').innerHTML=on?'<span class="spin">◠</span> ':'';
+ document.getElementById('gotxt').textContent=on?t().loading:t().analyze;}
+
+function analyze(){
+ var val=document.getElementById('input').value.trim();
+ if(!val&&!pdf)return;var text=val||('PDF: '+pdf);
+ document.getElementById('questions').className='qbox fade hidden';
+ document.getElementById('results').className='stack hidden';
+ setLoading(true);
+ setTimeout(function(){var m=classify(text);
+   if(m.needsQuestions){pending={m:m,text:text};showQuestions(m);}
+   else{showResults(m.result);save(text,m.result);}
+   setLoading(false);},1000);}
+
+function showQuestions(m){
+ document.getElementById('qref').textContent=m.reference;
+ var h='';m.questions.forEach(function(q,i){h+='<label>'+q+'</label><input required name="q'+i+'">';});
+ document.getElementById('qfields').innerHTML=h;
+ document.getElementById('questions').className='qbox fade';}
+function submitAnswers(e){e.preventDefault();setLoading(true);var p=pending;
+ setTimeout(function(){showResults(p.m.result);save(p.text,p.m.result);
+   document.getElementById('questions').className='qbox fade hidden';pending=null;setLoading(false);},800);}
+
+function showResults(r){var d=t();
+ var alts=r.hs.alts.map(function(a,i){return '<div class="hs-line"><span class="badge alt">'+d.alt+' '+(i+1)+'</span><div><div class="hs-code" style="font-size:16px;opacity:.8">'+a.code+'</div><div class="hs-desc">'+a.desc+'</div></div></div>';}).join('');
+ var html=''
+ +'<div class="sim fade"><div class="kk">'+d.simTitle+'</div><div class="code">'+r.sim.code+'</div><p>'+r.sim.desc+'</p></div>'
+ +'<div class="card"><div class="sec-h"><span class="n">03</span><h2>'+d.tariffs+'</h2></div><div class="tariffs">'
+   +'<div class="tf"><span class="k">'+d.die+'</span><span class="v" style="color:var(--navy)">'+r.sim.die+'</span></div>'
+   +'<div class="tf"><span class="k">'+d.te+'</span><span class="v" style="color:var(--gold)">'+r.sim.te+'</span></div>'
+   +'<div class="tf"><span class="k">'+d.iva+'</span><span class="v" style="color:var(--burg)">'+r.sim.iva+'</span></div>'
+ +'</div></div>'
+ +'<div class="card"><div class="sec-h"><span class="n">04</span><h2>'+d.hsTitle+'</h2></div>'
+   +'<div class="hs-line"><span class="badge sug">'+d.suggested+'</span><div><div class="hs-code">'+r.hs.suggested.code+'</div><div class="hs-desc">'+r.hs.suggested.desc+'</div></div></div>'
+   +'<div class="hs-alts">'+alts+'</div></div>'
+ +'<div class="card"><div class="sec-h"><span class="n">05</span><h2>'+d.simAltTitle+'</h2></div>'
+   +'<div class="row wrapf gap16"><span class="simalt-code">'+r.simAlt.code+'</span><span class="hs-desc" style="flex:1">'+r.simAlt.desc+'</span></div>'
+   +'<div class="row gap24" style="margin-top:16px">'
+     +'<span class="kv"><span style="color:var(--faint);font-weight:600">'+d.die+' </span><b class="die">'+r.simAlt.die+'</b></span>'
+     +'<span class="kv"><span style="color:var(--faint);font-weight:600">'+d.te+' </span><b class="te">'+r.simAlt.te+'</b></span>'
+     +'<span class="kv"><span style="color:var(--faint);font-weight:600">'+d.iva+' </span><b class="iva">'+r.simAlt.iva+'</b></span>'
+   +'</div></div>';
+ var el=document.getElementById('results');el.innerHTML=html;el.className='stack fade';}
+
+function load(){try{var h=localStorage.getItem('twHist');if(h)history=JSON.parse(h);}catch(e){}}
+function save(inp,r){var it={id:Date.now(),
+  date:new Date().toLocaleDateString(lang==='es'?'es-AR':'en-US',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}),
+  input:inp.length>55?inp.slice(0,52)+'…':inp,hs:r.hs.suggested.code,sim:r.sim.code,die:r.sim.die,iva:r.sim.iva};
+ history.unshift(it);history=history.slice(0,10);
+ try{localStorage.setItem('twHist',JSON.stringify(history));}catch(e){}renderHist();}
+function clearHist(){history=[];try{localStorage.removeItem('twHist');}catch(e){}renderHist();}
+function renderHist(){var el=document.getElementById('hlist'),d=t();
+ document.getElementById('hclear').className='hclear'+(history.length?'':' hidden');
+ if(!history.length){el.innerHTML='<div class="empty">'+d.noHist+'</div>';return;}
+ el.innerHTML=history.map(function(it){return ''
+  +'<div class="hitem"><div class="hd"><span class="dt">'+it.date+'</span><span class="hs">HS '+it.hs+'</span></div>'
+  +'<div class="txt">'+it.input+'</div>'
+  +'<div class="box"><div class="kk">SIM</div><div class="cc">'+it.sim+'</div>'
+  +'<div class="mm"><span>DIE <b>'+it.die+'</b></span><span>IVA <b>'+it.iva+'</b></span></div></div></div>';}).join('');}
+
+load();applyText();setupDrop();
+</script>
+</body>
+</html>

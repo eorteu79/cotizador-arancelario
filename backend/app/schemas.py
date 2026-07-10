@@ -5,13 +5,21 @@ from typing import Optional, List, Dict
 class CifInputs(BaseModel):
     cif_value: float = Field(..., gt=0, description="Valor CIF en la moneda elegida")
     currency: str = Field("USD", description="Moneda del valor CIF: USD, EUR, ARS, etc.")
-    importer_type: str = Field(
-        "responsable_inscripto",
-        description="responsable_inscripto | consumidor_final",
+    destino: str = Field(
+        "bien_cambio",
+        description=(
+            "Destino de la mercadería según RG 2937 (AFIP): bien_cambio (mercadería para "
+            "comercializar) | bien_uso (consumo propio, vida útil >= 2 años). Determina si "
+            "corresponden las percepciones de IVA adicional y Ganancias."
+        ),
     )
-    include_percepciones: bool = Field(
-        True,
-        description="Incluir percepciones (IVA adic, Ganancias, IIBB) en el desembolso total",
+    iibb_pct: float = Field(
+        2.5,
+        ge=0,
+        description=(
+            "Percepción de Ingresos Brutos, configurable por el usuario: varía según la "
+            "provincia/jurisdicción del importador y no depende de la posición arancelaria."
+        ),
     )
 
 
@@ -38,9 +46,30 @@ class Rates(BaseModel):
     derecho_importacion_pct: float = Field(0.0, description="Derecho de Importación (AEC Mercosur)")
     tasa_estadistica_pct: float = Field(3.0, description="Tasa de Estadística sobre CIF")
     iva_pct: float = Field(21.0, description="IVA general 21% (10.5% reducido para ciertos productos)")
-    iva_adicional_pct: float = Field(20.0, description="IVA adicional / percepción IVA")
-    ganancias_pct: float = Field(6.0, description="Percepción Impuesto a las Ganancias")
-    iibb_pct: float = Field(2.5, description="Percepción Ingresos Brutos (varía por provincia)")
+    iva_adicional_pct: float = Field(
+        20.0,
+        description=(
+            "Percepción IVA adicional (RG 2937): 20% general, 10% si el bien tiene IVA "
+            "reducido. Solo corresponde si el destino declarado es bien de cambio."
+        ),
+    )
+    ganancias_pct: float = Field(
+        6.0,
+        description=(
+            "Percepción Impuesto a las Ganancias (RG 2937). Solo corresponde si el destino "
+            "declarado es bien de cambio."
+        ),
+    )
+
+
+class RateSource(BaseModel):
+    """Per-field origin of each rate: 'base_oficial' (seed/official DB) or 'estimado_ia'."""
+
+    derecho_importacion: str = "estimado_ia"
+    tasa_estadistica: str = "estimado_ia"
+    iva: str = "estimado_ia"
+    iva_adicional: str = "estimado_ia"
+    ganancias: str = "estimado_ia"
 
 
 class Classification(BaseModel):
@@ -50,6 +79,13 @@ class Classification(BaseModel):
     rationale: str
     rates: Rates
     requirements: List[str] = []
+    rates_source: RateSource = Field(default_factory=RateSource)
+    base_match: bool = Field(
+        False, description="True si el NCM se encontró en la base de aranceles."
+    )
+    nota_base: Optional[str] = Field(
+        None, description="Observación de la base oficial para este NCM, si existe."
+    )
 
 
 class ProductInfo(BaseModel):
@@ -73,7 +109,7 @@ class CostBreakdown(BaseModel):
     costo_mercaderia: float = Field(..., description="CIF + DI + Tasa Estadística (impuestos no recuperables)")
     desembolso_aduana_sin_percepciones: float = Field(..., description="CIF + DI + TE + IVA")
     desembolso_aduana_total: float = Field(..., description="CIF + DI + TE + IVA + todas las percepciones")
-    landed_cost: float = Field(..., description="Costo landed estimado según el tipo de importador y la elección de percepciones")
+    landed_cost: float = Field(..., description="Costo landed estimado: CIF + DI + Tasa + IVA + percepciones que correspondan según el destino")
     notas: List[str] = []
 
 

@@ -28,9 +28,13 @@ relevantes para clasificación.
         - `derecho_importacion_pct`: AEC Mercosur para la NCM (0-35%)
         - `tasa_estadistica_pct`: típicamente 3.0% sobre CIF
         - `iva_pct`: 21.0 general, 10.5 si es alícuota reducida (por ej. ciertos alimentos, libros, etc.)
-        - `iva_adicional_pct`: 20.0% típico, 0 si exento, 10 en ciertos casos
-        - `ganancias_pct`: 6.0% típico, 11 si es bien suntuario, 0 si exento
-        - `iibb_pct`: 2.5% (varía por provincia y producto)
+        - `iva_adicional_pct`: percepción RG 2937, 20.0% típico (10.0% si el bien tiene IVA \
+reducido), 0 si exento. Aplica solo cuando el destino declarado por el usuario es "bien de \
+cambio"; el backend la anula automáticamente para "bien de uso".
+        - `ganancias_pct`: percepción RG 2937, 6.0% típico, 11 si es bien suntuario, 0 si \
+exento. Misma salvedad que `iva_adicional_pct`: solo aplica a "bien de cambio".
+      (No incluyas `iibb_pct`: la percepción de Ingresos Brutos depende de la provincia del \
+importador, no de la posición arancelaria, y la configura el usuario directamente.)
     - `requirements`: lista de requisitos / cosas a tener en cuenta. Por ejemplo:
         - Intervenciones previas (ANMAT, SENASA, INTI, ENACOM, Secretaría de Comercio)
         - Certificaciones obligatorias (Seguridad eléctrica res. 169/2018, eficiencia energética, etc.)
@@ -67,8 +71,7 @@ registradas en los bloques previos de la respuesta; el último bloque de texto d
         "tasa_estadistica_pct": 3.0,
         "iva_pct": 21.0,
         "iva_adicional_pct": 20.0,
-        "ganancias_pct": 6.0,
-        "iibb_pct": 2.5
+        "ganancias_pct": 6.0
       },
       "requirements": [
         "Certificación de seguridad eléctrica (Res. 169/2018)",

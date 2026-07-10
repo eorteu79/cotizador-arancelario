@@ -1,35 +1,39 @@
-import os
 import json
-import base64
 import re
-from typing import Optional, List, Dict, Any, Tuple
+import os
+import time
+from typing import Optional, List, Dict, Any
 
 import httpx
 from bs4 import BeautifulSoup
-from anthropic import Anthropic
+from google import genai
+from google.genai import errors, types
 
 from .prompts import SYSTEM_PROMPT
 
 
-_client: Optional[Anthropic] = None
+_client: Optional[genai.Client] = None
 
-MODEL = "claude-opus-4-7"
-MAX_TOKENS = 16000
-MAX_PAUSE_ITER = 5
+MODEL = "gemini-2.5-flash"
+MAX_OUTPUT_TOKENS = 16000
 URL_FETCH_MAX_CHARS = 30000
 USER_AGENT = "Mozilla/5.0 (compatible; ImportCostBot/1.0; +https://localhost)"
 
+RETRYABLE_CODES = {429, 500, 503}
+MAX_RETRIES = 3
+RETRY_BASE_DELAY_S = 2.0
 
-def get_client() -> Anthropic:
+
+def get_client() -> genai.Client:
     global _client
     if _client is None:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "ANTHROPIC_API_KEY no está configurada. Copiá backend/.env.example "
-                "a backend/.env y poné tu API key de Anthropic."
+                "GEMINI_API_KEY no está configurada. Copiá backend/.env.example "
+                "a backend/.env y poné tu API key de Gemini (Google AI Studio)."
             )
-        _client = Anthropic(api_key=api_key)
+        _client = genai.Client(api_key=api_key)
     return _client
 
 
@@ -67,13 +71,13 @@ def build_user_content(
     image_bytes: Optional[bytes],
     image_media_type: Optional[str],
     clarifications: List[Dict[str, str]],
-) -> List[Dict[str, Any]]:
-    content: List[Dict[str, Any]] = []
+) -> List[Any]:
+    parts: List[Any] = []
     intro = "Necesito clasificar este producto para importarlo a Argentina y estimar costos."
 
     if mode == "text":
         body = f"{intro}\n\nDescripción del producto:\n{text or ''}"
-        content.append({"type": "text", "text": body})
+        parts.append(body)
 
     elif mode == "url":
         page_text = fetch_url_text(url) if url else ""
@@ -86,46 +90,30 @@ def build_user_content(
         else:
             body += (
                 "\n(No se pudo extraer texto de la página automáticamente. "
-                "Usá la herramienta web_search para obtener más información sobre el producto.)\n"
+                "Usá la búsqueda web para obtener más información sobre el producto.)\n"
             )
-        content.append({"type": "text", "text": body})
+        parts.append(body)
 
     elif mode == "pdf":
-        content.append({
-            "type": "text",
-            "text": f"{intro}\n\nTe paso la ficha técnica del producto en PDF adjunto.",
-        })
+        parts.append(f"{intro}\n\nTe paso la ficha técnica del producto en PDF adjunto.")
         if pdf_bytes:
-            content.append({
-                "type": "document",
-                "source": {
-                    "type": "base64",
-                    "media_type": "application/pdf",
-                    "data": base64.standard_b64encode(pdf_bytes).decode("utf-8"),
-                },
-            })
+            parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
 
     elif mode == "image":
-        content.append({
-            "type": "text",
-            "text": (
-                f"{intro}\n\nTe paso una foto del producto. Identificá qué es y qué "
-                "características técnicas relevantes podés inferir; usá web_search si necesitás "
-                "complementar la información."
-            ),
-        })
+        parts.append(
+            f"{intro}\n\nTe paso una foto del producto. Identificá qué es y qué "
+            "características técnicas relevantes podés inferir; usá búsqueda web si necesitás "
+            "complementar la información."
+        )
         if image_bytes:
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": image_media_type or "image/jpeg",
-                    "data": base64.standard_b64encode(image_bytes).decode("utf-8"),
-                },
-            })
+            parts.append(
+                types.Part.from_bytes(
+                    data=image_bytes, mime_type=image_media_type or "image/jpeg"
+                )
+            )
 
     else:
-        content.append({"type": "text", "text": "(Modo de entrada no soportado)"})
+        parts.append("(Modo de entrada no soportado)")
 
     if clarifications:
         lines = ["\nRespuestas a preguntas anteriores de clarificación:"]
@@ -133,43 +121,41 @@ def build_user_content(
             cid = c.get("id", "")
             ans = c.get("answer", "")
             lines.append(f"- {cid}: {ans}")
-        content.append({"type": "text", "text": "\n".join(lines)})
+        parts.append("\n".join(lines))
 
-    return content
+    return parts
 
 
-def call_claude(messages: List[Dict[str, Any]]) -> str:
-    """Call Claude with web_search; handle pause_turn loops. Returns concatenated final text."""
+def call_gemini(parts: List[Any]) -> str:
+    """Call Gemini with Google Search grounding enabled. Returns the final text.
+
+    Retries with exponential backoff on transient errors (429 rate limit, 500/503
+    server overload) — Gemini Flash regularly returns 503 UNAVAILABLE under demand
+    spikes that clear up within seconds.
+    """
     client = get_client()
-    tools = [{"type": "web_search_20260209", "name": "web_search"}]
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
+        tools=[types.Tool(google_search=types.GoogleSearch())],
+    )
 
-    current_messages = list(messages)
-    response = None
-    for _ in range(MAX_PAUSE_ITER):
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            thinking={"type": "adaptive"},
-            output_config={"effort": "high"},
-            system=SYSTEM_PROMPT,
-            tools=tools,
-            messages=current_messages,
-        )
-        if response.stop_reason != "pause_turn":
-            break
-        # Server-side tool loop hit limit; echo assistant turn back and resume
-        current_messages = current_messages + [
-            {"role": "assistant", "content": response.content}
-        ]
+    last_error: Optional[errors.APIError] = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=parts,
+                config=config,
+            )
+            return response.text or ""
+        except errors.APIError as e:
+            last_error = e
+            if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES - 1:
+                raise
+            time.sleep(RETRY_BASE_DELAY_S * (2 ** attempt))
 
-    if response is None:
-        return ""
-
-    text_parts: List[str] = []
-    for block in response.content:
-        if getattr(block, "type", None) == "text":
-            text_parts.append(block.text)
-    return "\n".join(text_parts)
+    raise last_error  # pragma: no cover — loop always returns or raises above
 
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
@@ -204,7 +190,7 @@ def analyze_product(
     image_media_type: Optional[str] = None,
     clarifications: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
-    user_content = build_user_content(
+    parts = build_user_content(
         mode=mode,
         text=text,
         url=url,
@@ -213,8 +199,7 @@ def analyze_product(
         image_media_type=image_media_type,
         clarifications=clarifications or [],
     )
-    messages = [{"role": "user", "content": user_content}]
-    final_text = call_claude(messages)
+    final_text = call_gemini(parts)
     parsed = extract_json(final_text)
     if parsed is None:
         return {

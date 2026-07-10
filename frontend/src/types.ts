@@ -19,7 +19,16 @@ export interface Rates {
   iva_pct: number;
   iva_adicional_pct: number;
   ganancias_pct: number;
-  iibb_pct: number;
+}
+
+export type RateFieldSource = "base_oficial" | "estimado_ia";
+
+export interface RateSource {
+  derecho_importacion: RateFieldSource;
+  tasa_estadistica: RateFieldSource;
+  iva: RateFieldSource;
+  iva_adicional: RateFieldSource;
+  ganancias: RateFieldSource;
 }
 
 export interface Classification {
@@ -29,6 +38,9 @@ export interface Classification {
   rationale: string;
   rates: Rates;
   requirements: string[];
+  rates_source: RateSource;
+  base_match: boolean;
+  nota_base: string | null;
 }
 
 export interface ProductInfo {
@@ -55,13 +67,13 @@ export interface CostBreakdown {
   notas: string[];
 }
 
-export type ImporterType = "responsable_inscripto" | "consumidor_final";
+export type Destino = "bien_cambio" | "bien_uso";
 
 export interface CifInputs {
   cif_value: number;
   currency: string;
-  importer_type: ImporterType;
-  include_percepciones: boolean;
+  destino: Destino;
+  iibb_pct: number;
 }
 
 export interface AnalyzeResponse {

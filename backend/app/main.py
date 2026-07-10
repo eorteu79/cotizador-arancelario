@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 from typing import Optional, List
 
 from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
 # Load backend/.env (sibling of this app/ dir)
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
@@ -19,9 +22,11 @@ from .schemas import (
     ClarificationQuestion,
     ProductInfo,
     Rates,
+    RateSource,
 )
-from .claude_client import analyze_product
+from .gemini_client import analyze_product
 from .cost import compute_cost
+from .aranceles_db import lookup_ncm
 
 
 app = FastAPI(title="Estimador de Costo de Importación a Argentina")
@@ -43,6 +48,45 @@ DISCLAIMER = (
     "Estimación orientativa basada en IA + búsqueda web. La clasificación NCM y las alícuotas "
     "deben verificarse con un despachante de aduana habilitado antes de operar."
 )
+
+
+def _apply_base_rates(classification: Classification) -> Classification:
+    """Cross-reference the NCM Gemini suggested against the seed tariff base.
+
+    Gemini keeps suggesting the position, description, alternatives and requirements.
+    If the NCM is found in the base, DIE, tasa estadística, IVA and the reduced-IVA
+    flag (which feeds the IVA adicional percepción) are overridden with the official
+    seed values. `ganancias_pct` isn't in the seed schema yet, so it always stays as
+    Gemini's estimate. If the NCM isn't found, everything is left as Gemini's estimate,
+    marked "estimado_ia" for the frontend to flag as "verificar".
+    """
+    entry = lookup_ncm(classification.ncm)
+    if entry is None:
+        return classification
+
+    rates = classification.rates.model_copy(
+        update={
+            "derecho_importacion_pct": entry.die_aec,
+            "tasa_estadistica_pct": entry.tasa_estadistica,
+            "iva_pct": entry.iva,
+            "iva_adicional_pct": 0.0 if entry.iva == 0 else (10.0 if entry.iva_reducido else 20.0),
+        }
+    )
+    rates_source = RateSource(
+        derecho_importacion="base_oficial",
+        tasa_estadistica="base_oficial",
+        iva="base_oficial",
+        iva_adicional="base_oficial",
+        ganancias="estimado_ia",
+    )
+    return classification.model_copy(
+        update={
+            "rates": rates,
+            "rates_source": rates_source,
+            "base_match": True,
+            "nota_base": entry.nota,
+        }
+    )
 
 
 def _build_response(parsed: dict, cif: Optional[CifInputs]) -> AnalyzeResponse:
@@ -68,7 +112,7 @@ def _build_response(parsed: dict, cif: Optional[CifInputs]) -> AnalyzeResponse:
         try:
             rates_in = c.get("rates") or {}
             c_norm = {**c, "rates": Rates(**rates_in).model_dump()}
-            classifications.append(Classification(**c_norm))
+            classifications.append(_apply_base_rates(Classification(**c_norm)))
         except ValidationError:
             continue
 
@@ -98,7 +142,9 @@ def _build_response(parsed: dict, cif: Optional[CifInputs]) -> AnalyzeResponse:
 def health():
     return {
         "ok": True,
-        "anthropic_key_configured": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        # Field name kept as anthropic_key_configured (frontend contract unchanged
+        # by the Gemini migration); it now reflects GEMINI_API_KEY.
+        "anthropic_key_configured": bool(os.environ.get("GEMINI_API_KEY")),
     }
 
 
@@ -125,7 +171,7 @@ def analyze_json(req: AnalyzeRequest):
     except RuntimeError as e:
         raise HTTPException(500, str(e))
     except Exception as e:
-        raise HTTPException(500, f"Error al consultar Claude: {e}")
+        raise HTTPException(500, f"Error al consultar Gemini: {e}")
 
     return _build_response(parsed, req.cif)
 
@@ -197,6 +243,6 @@ async def analyze_file(
     except RuntimeError as e:
         raise HTTPException(500, str(e))
     except Exception as e:
-        raise HTTPException(500, f"Error al consultar Claude: {e}")
+        raise HTTPException(500, f"Error al consultar Gemini: {e}")
 
     return _build_response(parsed, cif)

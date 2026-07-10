@@ -8,48 +8,51 @@ def compute_cost(cif: CifInputs, rates: Rates) -> CostBreakdown:
         DI  = CIF * di_pct
         TE  = CIF * te_pct
         base_iva = CIF + DI + TE
-        IVA, IVA_adic, Ganancias, IIBB se aplican sobre base_iva
+        IVA se aplica siempre sobre base_iva.
+        IVA adicional y Ganancias (percepciones RG 2937) solo aplican si el destino
+        declarado es "bien_cambio" (mercadería para reventa); la RG 2937 exceptúa a los
+        bienes de uso (consumo propio, vida útil >= 2 años) de ambas percepciones.
+        IIBB es configurable por el usuario (varía por provincia) y se aplica igual en
+        ambos destinos, salvo que el usuario la deje en 0.
     """
     cv = cif.cif_value
+    es_bien_cambio = cif.destino == "bien_cambio"
 
     di = cv * rates.derecho_importacion_pct / 100.0
     te = cv * rates.tasa_estadistica_pct / 100.0
     base_iva = cv + di + te
 
     iva = base_iva * rates.iva_pct / 100.0
-    iva_adic = base_iva * rates.iva_adicional_pct / 100.0
-    ganancias = base_iva * rates.ganancias_pct / 100.0
-    iibb = base_iva * rates.iibb_pct / 100.0
+    iva_adic = base_iva * rates.iva_adicional_pct / 100.0 if es_bien_cambio else 0.0
+    ganancias = base_iva * rates.ganancias_pct / 100.0 if es_bien_cambio else 0.0
+    iibb = base_iva * cif.iibb_pct / 100.0
 
-    costo_mercaderia = cv + di + te  # No recuperables, "costo real" para responsable inscripto
+    costo_mercaderia = cv + di + te
     desembolso_sin_perc = costo_mercaderia + iva
     desembolso_total = desembolso_sin_perc + iva_adic + ganancias + iibb
 
     notas = []
-    if cif.importer_type == "responsable_inscripto":
-        # IVA y percepciones son crédito fiscal recuperable
-        if cif.include_percepciones:
-            landed = desembolso_total
-            notas.append(
-                "Como Responsable Inscripto, el IVA y las percepciones son crédito fiscal recuperable. "
-                "Este total incluye el desembolso completo en aduana; tu costo de mercadería 'real' es CIF + DI + Tasa."
-            )
-        else:
-            landed = costo_mercaderia
-            notas.append(
-                "Como Responsable Inscripto, IVA y percepciones son recuperables. "
-                "Mostramos el costo 'real' de la mercadería (CIF + DI + Tasa)."
-            )
-    else:
-        # Consumidor final: IVA no se recupera; percepciones no aplican o no recupera
-        landed = desembolso_sin_perc
+    if es_bien_cambio:
         notas.append(
-            "Como Consumidor Final, el IVA no se recupera y forma parte del costo. "
-            "Las percepciones generalmente no aplican o se ven en otra vía."
+            "Destino 'bien de cambio' (mercadería para reventa): corresponden las "
+            "percepciones de IVA adicional y Ganancias, según RG 2937 (AFIP)."
         )
-
+    else:
+        notas.append(
+            "Destino 'bien de uso' (consumo propio, vida útil ≥ 2 años): por la excepción "
+            "de la RG 2937 (AFIP) no corresponden las percepciones de IVA adicional ni de "
+            "Ganancias. La percepción de IIBB depende de la jurisdicción y normalmente "
+            "tampoco aplica a bienes de uso."
+        )
     notas.append(
-        "Estimación orientativa. La clasificación NCM y las alícuotas deben confirmarse con un despachante."
+        "Los certificados de exclusión de percepción (RG 5655/2025, AFIP) pueden reducir "
+        "o eliminar estas percepciones incluso para bienes de cambio; no están "
+        "contemplados en este cálculo automático — es un caso avanzado a evaluar con tu "
+        "despachante."
+    )
+    notas.append(
+        "Estimación orientativa. La clasificación NCM, las alícuotas y la percepción de "
+        "IIBB aplicable deben confirmarse con un despachante de aduana."
     )
 
     return CostBreakdown(
@@ -65,6 +68,6 @@ def compute_cost(cif: CifInputs, rates: Rates) -> CostBreakdown:
         costo_mercaderia=round(costo_mercaderia, 2),
         desembolso_aduana_sin_percepciones=round(desembolso_sin_perc, 2),
         desembolso_aduana_total=round(desembolso_total, 2),
-        landed_cost=round(landed, 2),
+        landed_cost=round(desembolso_total, 2),
         notas=notas,
     )

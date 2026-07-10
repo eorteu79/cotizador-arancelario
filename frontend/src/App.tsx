@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { analyze, health } from "./api";
+import tailwindLogo from "./assets/tailwind-logo.png";
 import type {
   AnalyzeResponse,
   CifInputs,
   Classification,
   ClarificationAnswer,
   CostBreakdown,
-  ImporterType,
+  Destino,
   Mode,
   Probability,
+  RateFieldSource,
 } from "./types";
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -19,12 +21,17 @@ const MODE_LABELS: Record<Mode, string> = {
   image: "Foto",
 };
 
+const IIBB_DEFAULT_BY_DESTINO: Record<Destino, number> = {
+  bien_cambio: 2.5,
+  bien_uso: 0,
+};
+
 function defaultCif(): CifInputs {
   return {
     cif_value: 100,
     currency: "USD",
-    importer_type: "responsable_inscripto",
-    include_percepciones: true,
+    destino: "bien_cambio",
+    iibb_pct: IIBB_DEFAULT_BY_DESTINO.bien_cambio,
   };
 }
 
@@ -89,24 +96,35 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      <div className="topbar">
+        <div className="logo">
+          <img src={tailwindLogo} alt="Tailwind Global Commerce" className="logoimg" />
+        </div>
+      </div>
+
+      <div className="header">
+        <div className="eyebrow">Clasificador Arancelario</div>
         <h1>Estimador de costo de importación a Argentina</h1>
-        <p>
+        <p className="lead">
           Describí el producto (texto, URL, PDF o foto), indicá el valor CIF, y obtené una
           posición arancelaria NCM probable junto con la estimación de aranceles, impuestos y
           costo landed.
         </p>
-      </header>
+        <div className="goldrule" />
+      </div>
 
       {keyOk === false && (
         <div className="alert alert-warning">
-          <strong>Atención:</strong> No se detectó <code>ANTHROPIC_API_KEY</code> en el backend.
+          <strong>Atención:</strong> No se detectó <code>GEMINI_API_KEY</code> en el backend.
           Configurala en <code>backend/.env</code> y reiniciá el servidor.
         </div>
       )}
 
       <div className="card">
-        <h2>1 · Definí el producto</h2>
+        <div className="sec-h">
+          <span className="n">01</span>
+          <h2>Definí el producto</h2>
+        </div>
         <div className="tabs">
           {(["text", "url", "pdf", "image"] as Mode[]).map((m) => (
             <button
@@ -133,7 +151,10 @@ export default function App() {
       </div>
 
       <div className="card">
-        <h2>2 · Datos del valor CIF</h2>
+        <div className="sec-h">
+          <span className="n">02</span>
+          <h2>Datos del valor CIF</h2>
+        </div>
         <CifForm cif={cif} setCif={setCif} />
       </div>
 
@@ -152,7 +173,7 @@ export default function App() {
         <div className="loader">
           <div className="spinner" />
           <span>
-            Consultando Claude y buscando en la web... (puede tardar 20–60 segundos)
+            Consultando Gemini y buscando en la web... (puede tardar 20–60 segundos)
           </span>
         </div>
       )}
@@ -164,9 +185,12 @@ export default function App() {
       )}
 
       {result && result.needs_clarification && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h2>Faltan algunos datos</h2>
-          <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
+        <div className="qbox">
+          <div className="sec-h" style={{ marginBottom: 6 }}>
+            <span className="n">✳</span>
+            <h2>Faltan algunos datos</h2>
+          </div>
+          <p className="hint" style={{ marginBottom: 16, marginTop: 0 }}>
             Para clasificar con mayor certeza, contestá las siguientes preguntas:
           </p>
           {result.clarification_questions.map((q) => (
@@ -185,7 +209,7 @@ export default function App() {
             </div>
           ))}
           <button
-            className="btn"
+            className="qsub"
             disabled={
               loading || Object.values(clarifAnswers).every((v) => !v || !v.trim())
             }
@@ -330,60 +354,83 @@ function FileDrop(props: {
 
 function CifForm({ cif, setCif }: { cif: CifInputs; setCif: (c: CifInputs) => void }) {
   return (
-    <div className="grid grid-3">
-      <div>
-        <label htmlFor="cif-value">Valor CIF</label>
-        <input
-          id="cif-value"
-          type="number"
-          min={0}
-          step={0.01}
-          value={cif.cif_value}
-          onChange={(e) =>
-            setCif({ ...cif, cif_value: parseFloat(e.target.value) || 0 })
-          }
-        />
-        <div className="hint">Costo + Seguro + Flete (CIF) hasta puerto argentino.</div>
+    <div>
+      <div className="grid grid-3">
+        <div>
+          <label htmlFor="cif-value">Valor CIF</label>
+          <input
+            id="cif-value"
+            type="number"
+            min={0}
+            step={0.01}
+            value={cif.cif_value}
+            onChange={(e) =>
+              setCif({ ...cif, cif_value: parseFloat(e.target.value) || 0 })
+            }
+          />
+          <div className="hint">Costo + Seguro + Flete (CIF) hasta puerto argentino.</div>
+        </div>
+        <div>
+          <label htmlFor="cif-currency">Moneda</label>
+          <select
+            id="cif-currency"
+            value={cif.currency}
+            onChange={(e) => setCif({ ...cif, currency: e.target.value })}
+          >
+            <option>USD</option>
+            <option>EUR</option>
+            <option>ARS</option>
+            <option>BRL</option>
+            <option>CNY</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="cif-destino">Destino de la mercadería</label>
+          <select
+            id="cif-destino"
+            value={cif.destino}
+            onChange={(e) => {
+              const destino = e.target.value as Destino;
+              setCif({ ...cif, destino, iibb_pct: IIBB_DEFAULT_BY_DESTINO[destino] });
+            }}
+          >
+            <option value="bien_cambio">Bien de cambio (reventa)</option>
+            <option value="bien_uso">Bien de uso (consumo propio)</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label htmlFor="cif-currency">Moneda</label>
-        <select
-          id="cif-currency"
-          value={cif.currency}
-          onChange={(e) => setCif({ ...cif, currency: e.target.value })}
-        >
-          <option>USD</option>
-          <option>EUR</option>
-          <option>ARS</option>
-          <option>BRL</option>
-          <option>CNY</option>
-        </select>
+
+      <div className="grid grid-3" style={{ marginTop: 14 }}>
+        <div>
+          <label htmlFor="cif-iibb">Percepción IIBB (%)</label>
+          <input
+            id="cif-iibb"
+            type="number"
+            min={0}
+            step={0.1}
+            value={cif.iibb_pct}
+            onChange={(e) =>
+              setCif({ ...cif, iibb_pct: parseFloat(e.target.value) || 0 })
+            }
+          />
+          <div className="hint">
+            Varía según tu provincia/jurisdicción — ajustá el porcentaje si corresponde.
+          </div>
+        </div>
       </div>
-      <div>
-        <label htmlFor="cif-importer">Tipo de importador</label>
-        <select
-          id="cif-importer"
-          value={cif.importer_type}
-          onChange={(e) =>
-            setCif({ ...cif, importer_type: e.target.value as ImporterType })
-          }
-        >
-          <option value="responsable_inscripto">Responsable Inscripto</option>
-          <option value="consumidor_final">Consumidor Final</option>
-        </select>
-      </div>
-      <div className="row-inline" style={{ gridColumn: "1 / -1", marginTop: 4 }}>
-        <input
-          id="incperc"
-          type="checkbox"
-          checked={cif.include_percepciones}
-          onChange={(e) =>
-            setCif({ ...cif, include_percepciones: e.target.checked })
-          }
-        />
-        <label htmlFor="incperc" style={{ marginBottom: 0 }}>
-          Incluir percepciones (IVA adicional, Ganancias, IIBB) en el desembolso total
-        </label>
+
+      <div className="note-box">
+        <strong>Bien de cambio</strong> (mercadería para comercializar): además de Derecho de
+        Importación, Tasa Estadística e IVA, se suman las percepciones de IVA adicional (20%,
+        o 10% si el bien tiene IVA reducido) y Ganancias (6%), más IIBB según tu provincia.
+        <br />
+        <strong>Bien de uso</strong> (consumo propio, vida útil ≥ 2 años): por la excepción de
+        la RG 2937 (AFIP) no corresponden las percepciones de IVA adicional ni de Ganancias;
+        la de IIBB normalmente tampoco aplica.
+        <br />
+        Los certificados de exclusión de percepción (RG 5655/2025) pueden reducir aún más
+        estas percepciones — es un caso avanzado que este cálculo no contempla; consultalo con
+        tu despachante.
       </div>
     </div>
   );
@@ -395,23 +442,22 @@ function Badge({ p }: { p: Probability }) {
 
 function Results({ result }: { result: AnalyzeResponse }) {
   const { product, classifications, cost_breakdown, notes } = result;
+  const primary = classifications[0];
+  const alternatives = classifications.slice(1);
+
   return (
     <>
       {product && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h2>Producto identificado</h2>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 8,
-            }}
-          >
+        <div className="card">
+          <div className="sec-h">
+            <span className="n">03</span>
+            <h2>Producto identificado</h2>
+          </div>
+          <div className="row wrapf gap12" style={{ marginBottom: 8 }}>
             <strong style={{ fontSize: 17 }}>{product.identified_name}</strong>
             <Badge p={product.confidence} />
           </div>
-          <p style={{ fontSize: 14, color: "var(--text-muted)" }}>
+          <p className="hint" style={{ marginTop: 0 }}>
             {product.summary}
           </p>
           {product.key_attributes &&
@@ -428,25 +474,118 @@ function Results({ result }: { result: AnalyzeResponse }) {
         </div>
       )}
 
-      {classifications.length > 0 && (
+      {primary && (
+        <>
+          <div className="card">
+            <div className="sec-h">
+              <span className="n">04</span>
+              <h2>Clasificación arancelaria (NCM)</h2>
+            </div>
+            <div className="sim">
+              <div className="row between wrapf gap12">
+                <span className="kk">Posición sugerida</span>
+                <Badge p={primary.probability} />
+              </div>
+              <div className="code">{primary.ncm}</div>
+              <p>{primary.description}</p>
+              {primary.rationale && (
+                <p className="sim-rationale">{primary.rationale}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="sec-h">
+              <span className="n">05</span>
+              <h2>Aranceles e impuestos</h2>
+            </div>
+            <div className="tariffs">
+              <Tf
+                label="DI"
+                v={primary.rates.derecho_importacion_pct}
+                color="v-navy"
+                source={primary.rates_source.derecho_importacion}
+              />
+              <Tf
+                label="Tasa Estad."
+                v={primary.rates.tasa_estadistica_pct}
+                color="v-gold"
+                source={primary.rates_source.tasa_estadistica}
+              />
+              <Tf
+                label="IVA"
+                v={primary.rates.iva_pct}
+                color="v-burg"
+                source={primary.rates_source.iva}
+              />
+              <Tf
+                label="IVA adic."
+                v={primary.rates.iva_adicional_pct}
+                color="v-navy"
+                source={primary.rates_source.iva_adicional}
+              />
+              <Tf
+                label="Ganancias"
+                v={primary.rates.ganancias_pct}
+                color="v-gold"
+                source={primary.rates_source.ganancias}
+              />
+            </div>
+            <p className="hint">
+              IVA adicional y Ganancias son percepciones (RG 2937) que solo corresponden si el
+              destino de la mercadería es "bien de cambio" — la IIBB configurada en el paso 02
+              se suma según tu provincia. Mirá el desglose real aplicado en la estimación de
+              costo landed más abajo.
+            </p>
+            {primary.nota_base && (
+              <p className="hint" style={{ marginTop: 4 }}>
+                <strong>Nota de la base oficial:</strong> {primary.nota_base}
+              </p>
+            )}
+            {primary.requirements && primary.requirements.length > 0 && (
+              <>
+                <div className="subhead">Requisitos / cosas a tener en cuenta</div>
+                <ul className="requirements">
+                  {primary.requirements.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {alternatives.length > 0 && (
         <div className="card">
-          <h2>Clasificación arancelaria (NCM)</h2>
-          {classifications.map((c, i) => (
-            <NcmCard key={c.ncm + i} c={c} primary={i === 0} />
-          ))}
+          <div className="sec-h">
+            <span className="n">06</span>
+            <h2>Alternativas</h2>
+          </div>
+          <div className="hs-alts">
+            {alternatives.map((c, i) => (
+              <AltClassification key={c.ncm + i} c={c} />
+            ))}
+          </div>
         </div>
       )}
 
       {cost_breakdown && (
         <div className="card">
-          <h2>Estimación de costo landed</h2>
+          <div className="sec-h">
+            <span className="n">07</span>
+            <h2>Estimación de costo landed</h2>
+          </div>
           <CostTable b={cost_breakdown} />
         </div>
       )}
 
       {notes.length > 0 && (
         <div className="card">
-          <h2>Notas y consideraciones</h2>
+          <div className="sec-h">
+            <span className="n">08</span>
+            <h2>Notas y consideraciones</h2>
+          </div>
           <ul className="requirements">
             {notes.map((n, i) => (
               <li key={i}>{n}</li>
@@ -458,29 +597,67 @@ function Results({ result }: { result: AnalyzeResponse }) {
   );
 }
 
-function NcmCard({ c, primary }: { c: Classification; primary: boolean }) {
+function SourceTag({ source }: { source: RateFieldSource }) {
+  const isBase = source === "base_oficial";
   return (
-    <div className={`ncm-card ${primary ? "primary" : ""}`}>
-      <div className="ncm-header">
-        <div className="ncm-code">{c.ncm}</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {primary && <span className="badge badge-alta">Más probable</span>}
-          <Badge p={c.probability} />
+    <span className={`src-tag ${isBase ? "src-base" : "src-ia"}`}>
+      {isBase ? "Base oficial" : "Estimado por IA — verificar"}
+    </span>
+  );
+}
+
+function Tf({
+  label,
+  v,
+  color,
+  source,
+}: {
+  label: string;
+  v: number;
+  color: "v-navy" | "v-gold" | "v-burg";
+  source: RateFieldSource;
+}) {
+  return (
+    <div className="tf">
+      <span className="k">{label}</span>
+      <span className={`v ${color}`}>{Number(v).toFixed(1)}%</span>
+      <br />
+      <SourceTag source={source} />
+    </div>
+  );
+}
+
+function AltClassification({ c }: { c: Classification }) {
+  return (
+    <div>
+      <div className="hs-line">
+        <span className="badge alt">Alternativa</span>
+        <div style={{ flex: 1 }}>
+          <div className="hs-code">{c.ncm}</div>
+          <div className="hs-desc">{c.description}</div>
         </div>
+        <Badge p={c.probability} />
       </div>
-      <div className="ncm-desc">{c.description}</div>
-      {c.rationale && <div className="ncm-rationale">{c.rationale}</div>}
-      <div className="rates-grid">
-        <Rate label="DI" v={c.rates.derecho_importacion_pct} />
-        <Rate label="Tasa Estad." v={c.rates.tasa_estadistica_pct} />
-        <Rate label="IVA" v={c.rates.iva_pct} />
-        <Rate label="IVA adic." v={c.rates.iva_adicional_pct} />
-        <Rate label="Ganancias" v={c.rates.ganancias_pct} />
-        <Rate label="IIBB" v={c.rates.iibb_pct} />
+      {c.rationale && (
+        <div className="hs-desc" style={{ marginBottom: 6 }}>
+          {c.rationale}
+        </div>
+      )}
+      <div className="kv-row">
+        <Kv label="DI" v={c.rates.derecho_importacion_pct} cls="die" source={c.rates_source.derecho_importacion} />
+        <Kv label="Tasa" v={c.rates.tasa_estadistica_pct} cls="te" source={c.rates_source.tasa_estadistica} />
+        <Kv label="IVA" v={c.rates.iva_pct} cls="iva" source={c.rates_source.iva} />
+        <Kv label="IVA adic." v={c.rates.iva_adicional_pct} cls="die" source={c.rates_source.iva_adicional} />
+        <Kv label="Ganancias" v={c.rates.ganancias_pct} cls="te" source={c.rates_source.ganancias} />
       </div>
+      {c.nota_base && (
+        <div className="hs-desc" style={{ marginTop: 6 }}>
+          <strong>Nota de la base oficial:</strong> {c.nota_base}
+        </div>
+      )}
       {c.requirements && c.requirements.length > 0 && (
         <>
-          <div className="subhead">Requisitos / cosas a tener en cuenta</div>
+          <div className="subhead">Requisitos</div>
           <ul className="requirements">
             {c.requirements.map((r, i) => (
               <li key={i}>{r}</li>
@@ -492,12 +669,23 @@ function NcmCard({ c, primary }: { c: Classification; primary: boolean }) {
   );
 }
 
-function Rate({ label, v }: { label: string; v: number }) {
+function Kv({
+  label,
+  v,
+  cls,
+  source,
+}: {
+  label: string;
+  v: number;
+  cls: "die" | "te" | "iva";
+  source: RateFieldSource;
+}) {
   return (
-    <div className="rate">
-      <div className="rate-label">{label}</div>
-      <div className="rate-value">{Number(v).toFixed(1)}%</div>
-    </div>
+    <span className="kv">
+      <span className="kv-label">{label} </span>
+      <b className={cls}>{Number(v).toFixed(1)}%</b>{" "}
+      <SourceTag source={source} />
+    </span>
   );
 }
 

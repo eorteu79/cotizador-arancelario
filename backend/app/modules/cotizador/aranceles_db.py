@@ -6,7 +6,7 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel
 
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "aranceles_base_3b.csv")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "aranceles_base_3b.csv")
 
 VIGENCIA_BASE = "Base NCM feb-2023 + correcciones 2026"
 

@@ -795,3 +795,149 @@ label {
   font-weight: 700;
   color: var(--gold-deep);
 }
+
+/* ---------- app shell ---------- */
+.shell-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.shell-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 16px 28px;
+  background: var(--navy);
+  border-bottom: 3px solid var(--gold);
+}
+
+.shell-logoimg {
+  height: 34px;
+  width: auto;
+  display: block;
+}
+
+.shell-nav-links {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.shell-nav-link {
+  padding: 8px 14px;
+  font-family: "Open Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.65);
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  transition: 0.15s;
+}
+
+.shell-nav-link:hover {
+  color: #fff;
+}
+
+.shell-nav-link.active {
+  background: rgba(223, 181, 106, 0.16);
+  color: var(--gold);
+}
+
+.shell-nav-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.shell-nav-email {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.shell-nav-signout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-family: "Open Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 7px 14px;
+  border-radius: var(--r-sm);
+  transition: 0.15s;
+}
+
+.shell-nav-signout:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.shell-main {
+  min-height: calc(100vh - 66px);
+}
+
+/* ---------- login page ---------- */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--gold);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh);
+  padding: 36px 32px;
+}
+
+.login-logo {
+  height: 36px;
+  width: auto;
+  display: block;
+  margin-bottom: 22px;
+}
+
+.login-card h1 {
+  font-family: "Open Sans", sans-serif;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: 20px;
+  margin-bottom: 22px;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-card .btn {
+  margin-top: 6px;
+}
+
+.login-switch {
+  display: block;
+  margin: 18px auto 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.login-switch:hover {
+  color: var(--navy);
+}

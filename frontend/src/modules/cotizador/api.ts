@@ -1,3 +1,4 @@
+import { supabase } from "../../lib/supabaseClient";
 import type {
   AnalyzeResponse,
   CifInputs,
@@ -5,7 +6,7 @@ import type {
   Mode,
 } from "./types";
 
-const API_BASE = "/api";
+const MODULE_BASE = "/api/cotizador";
 
 export interface AnalyzeArgs {
   mode: Mode;
@@ -26,7 +27,15 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
+async function authHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
+  const auth = await authHeader();
+
   if (args.mode === "text" || args.mode === "url") {
     const body = {
       mode: args.mode,
@@ -35,9 +44,9 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
       cif: args.cif,
       clarifications: args.clarifications,
     };
-    const res = await fetch(`${API_BASE}/analyze`, {
+    const res = await fetch(`${MODULE_BASE}/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(await readError(res));
@@ -52,8 +61,9 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
   fd.append("cif_json", JSON.stringify(args.cif));
   fd.append("clarifications_json", JSON.stringify(args.clarifications));
 
-  const res = await fetch(`${API_BASE}/analyze/file`, {
+  const res = await fetch(`${MODULE_BASE}/analyze/file`, {
     method: "POST",
+    headers: auth,
     body: fd,
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -61,7 +71,7 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
 }
 
 export async function health(): Promise<{ ok: boolean; anthropic_key_configured: boolean }> {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await fetch("/api/health");
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }

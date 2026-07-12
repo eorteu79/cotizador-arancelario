@@ -6,7 +6,13 @@ import type {
   Mode,
 } from "./types";
 
-const MODULE_BASE = "/api/cotizador";
+// In production the API is served on the same domain (Vercel rewrites /api/* to the
+// backend service), so the relative "/api" default works with no config. In local dev,
+// default to the FastAPI dev server directly. Override with VITE_API_BASE_URL if needed
+// (e.g. pointing a local frontend at a deployed backend).
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:8000/api" : "/api");
+const MODULE_BASE = `${API_BASE}/cotizador`;
 
 export interface AnalyzeArgs {
   mode: Mode;
@@ -71,7 +77,7 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
 }
 
 export async function health(): Promise<{ ok: boolean; anthropic_key_configured: boolean }> {
-  const res = await fetch("/api/health");
+  const res = await fetch(`${API_BASE}/health`);
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }

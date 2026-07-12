@@ -63,7 +63,9 @@ class Rates(BaseModel):
 
 
 class RateSource(BaseModel):
-    """Per-field origin of each rate: 'base_oficial' (seed/official DB) or 'estimado_ia'."""
+    """Per-field origin of each rate: 'base_oficial' (official DB), 'estimado_ia' (Gemini,
+    NCM not found in the base) or 'verificar' (NCM found in the base but this specific
+    field — currently only die_aec for ~950 positions — has no data there)."""
 
     derecho_importacion: str = "estimado_ia"
     tasa_estadistica: str = "estimado_ia"
@@ -121,3 +123,4 @@ class AnalyzeResponse(BaseModel):
     cost_breakdown: Optional[CostBreakdown] = None
     notes: List[str] = []
     disclaimer: str = ""
+    vigencia_base: str = ""

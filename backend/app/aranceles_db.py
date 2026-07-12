@@ -6,7 +6,9 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel
 
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "aranceles.csv")
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "aranceles_base_3b.csv")
+
+VIGENCIA_BASE = "Base NCM feb-2023 + correcciones 2026"
 
 _DIGITS_RE = re.compile(r"\D")
 
@@ -16,7 +18,7 @@ logger = logging.getLogger("aranceles")
 class ArancelEntry(BaseModel):
     ncm: str
     descripcion: str
-    die_aec: float
+    die_aec: Optional[float] = None
     tasa_estadistica: float
     iva: float
     iva_reducido: bool
@@ -55,11 +57,16 @@ def load_aranceles(path: str = DATA_PATH) -> Dict[str, ArancelEntry]:
         code = normalize_ncm(raw_ncm)
         if len(code) != 8:
             continue
+        raw_die = (row.get("die_aec") or "").strip()
+        try:
+            die_aec = float(raw_die) if raw_die else None
+        except ValueError:
+            die_aec = None
         try:
             entry = ArancelEntry(
                 ncm=code,
                 descripcion=(row.get("descripcion") or "").strip(),
-                die_aec=float(row["die_aec"]),
+                die_aec=die_aec,
                 tasa_estadistica=float(row["tasa_estadistica"]),
                 iva=float(row["iva"]),
                 iva_reducido=_parse_bool(row.get("iva_reducido") or ""),

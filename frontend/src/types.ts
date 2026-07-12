@@ -21,7 +21,7 @@ export interface Rates {
   ganancias_pct: number;
 }
 
-export type RateFieldSource = "base_oficial" | "estimado_ia";
+export type RateFieldSource = "base_oficial" | "estimado_ia" | "verificar";
 
 export interface RateSource {
   derecho_importacion: RateFieldSource;
@@ -84,4 +84,5 @@ export interface AnalyzeResponse {
   cost_breakdown: CostBreakdown | null;
   notes: string[];
   disclaimer: string;
+  vigencia_base: string;
 }

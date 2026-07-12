@@ -680,6 +680,13 @@ label {
   border: 1px solid var(--goldline);
 }
 
+.src-tag.src-verificar {
+  background: rgba(126, 36, 50, 0.1);
+  color: var(--burg);
+  border: 1px solid rgba(126, 36, 50, 0.35);
+  cursor: help;
+}
+
 /* ---------- requirements / subhead ---------- */
 .requirements {
   list-style: none;
@@ -781,4 +788,10 @@ label {
   font-size: 12px;
   color: var(--muted);
   text-align: left;
+}
+
+.vigencia-base {
+  margin-top: 6px;
+  font-weight: 700;
+  color: var(--gold-deep);
 }

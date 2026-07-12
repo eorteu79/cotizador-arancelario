@@ -223,8 +223,13 @@ export default function App() {
       {result && !result.needs_clarification && <Results result={result} />}
 
       <footer className="footer">
-        {result?.disclaimer ??
-          "Resultados orientativos. Verificá con un despachante antes de operar."}
+        <div>
+          {result?.disclaimer ??
+            "Resultados orientativos. Verificá con un despachante antes de operar."}
+        </div>
+        <div className="vigencia-base">
+          {result?.vigencia_base ?? "Base NCM feb-2023 + correcciones 2026"}
+        </div>
       </footer>
     </div>
   );
@@ -598,12 +603,20 @@ function Results({ result }: { result: AnalyzeResponse }) {
 }
 
 function SourceTag({ source }: { source: RateFieldSource }) {
-  const isBase = source === "base_oficial";
-  return (
-    <span className={`src-tag ${isBase ? "src-base" : "src-ia"}`}>
-      {isBase ? "Base oficial" : "Estimado por IA — verificar"}
-    </span>
-  );
+  if (source === "base_oficial") {
+    return <span className="src-tag src-base">Base oficial</span>;
+  }
+  if (source === "verificar") {
+    return (
+      <span
+        className="src-tag src-verificar"
+        title="Este dato no está informado en la base oficial para esta posición; se usa el estimado por IA."
+      >
+        Sin dato en base — verificar
+      </span>
+    );
+  }
+  return <span className="src-tag src-ia">Estimado por IA — verificar</span>;
 }
 
 function Tf({

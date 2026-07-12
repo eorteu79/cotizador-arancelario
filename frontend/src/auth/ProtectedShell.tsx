@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
-import tailwindLogo from "../assets/tailwind-logo.png";
+import tailwindLogo from "../assets/tailwind-logo-header.png";
 import { modules } from "../modules/registry";
 import { useAuth } from "./useAuth";
 

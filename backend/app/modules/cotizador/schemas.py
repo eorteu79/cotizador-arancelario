@@ -124,6 +124,12 @@ class AnalyzeResponse(BaseModel):
     notes: List[str] = []
     disclaimer: str = ""
     vigencia_base: str = ""
+    cotizacion_id: Optional[str] = Field(
+        None, description="Id de la fila en public.cotizaciones si el guardado del historial tuvo éxito."
+    )
+    cotizacion_created_at: Optional[str] = Field(
+        None, description="created_at de esa fila. Ausente junto con cotizacion_id si el guardado falló."
+    )
 
 
 class EntradaOriginal(BaseModel):

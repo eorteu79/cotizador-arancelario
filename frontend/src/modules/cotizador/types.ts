@@ -85,6 +85,11 @@ export interface AnalyzeResponse {
   notes: string[];
   disclaimer: string;
   vigencia_base: string;
+  /** Id de la fila en public.cotizaciones, si el guardado del historial tuvo
+   * éxito. Ausente junto con cotizacion_created_at si falló (ver
+   * export/filename.ts para el fallback de nombre de archivo). */
+  cotizacion_id: string | null;
+  cotizacion_created_at: string | null;
 }
 
 /** Router `location.state` shape used by the "Retomar" button in /historial to

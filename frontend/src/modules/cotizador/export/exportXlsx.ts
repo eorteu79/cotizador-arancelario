@@ -325,7 +325,7 @@ export async function exportCotizacionXlsx(data: ExportData): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${exportFileBaseName(data.ncm, data.fechaIso)}.xlsx`;
+  a.download = `${exportFileBaseName(data.id, data.fechaIso)}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();

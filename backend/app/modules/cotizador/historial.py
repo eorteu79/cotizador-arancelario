@@ -30,8 +30,9 @@ def _headers(**extra: str) -> Dict[str, str]:
 
 def guardar_cotizacion(
     *, user_id: str, producto: str, ncm: str, fuente: str, resultado: Dict[str, Any]
-) -> None:
-    """Inserta una fila. Deja que la excepción suba — el caller decide si la
+) -> Dict[str, Any]:
+    """Inserta una fila y devuelve la fila insertada (id y created_at incluidos,
+    generados por la base). Deja que la excepción suba — el caller decide si la
     trata como no-fatal (ver router.py: no debe romper la respuesta al usuario)."""
     _require_config()
     row = {
@@ -42,9 +43,10 @@ def guardar_cotizacion(
         "resultado": resultado,
     }
     resp = httpx.post(
-        _TABLE_URL, headers=_headers(Prefer="return=minimal"), json=row, timeout=10
+        _TABLE_URL, headers=_headers(Prefer="return=representation"), json=row, timeout=10
     )
     resp.raise_for_status()
+    return resp.json()[0]
 
 
 def listar_cotizaciones(*, user_id: str, limit: int, offset: int) -> List[Dict[str, Any]]:

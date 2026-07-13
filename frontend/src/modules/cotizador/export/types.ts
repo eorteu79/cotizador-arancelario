@@ -27,6 +27,10 @@ export interface DesgloseRow {
  * resultado en vivo del cotizador como desde una cotización del historial —
  * ver buildExportData(). */
 export interface ExportData {
+  /** Uuid completo de la fila en public.cotizaciones ("" si el guardado
+   * falló) — filename.ts arma el nombre del export a partir de esto, no del
+   * NCM. */
+  id: string;
   cotizacionNumero: string;
   fechaIso: string;
   email: string;

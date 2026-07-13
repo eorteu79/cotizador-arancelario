@@ -47,8 +47,12 @@ def _guardar_historial(
     fallback_producto: str,
     entrada: Optional[EntradaOriginal] = None,
 ) -> None:
-    """Guarda la cotización final en el historial. No debe romper la respuesta
-    al usuario si falla (Supabase caído, RLS mal configurado, etc.).
+    """Guarda la cotización final en el historial y completa resp.cotizacion_id /
+    resp.cotizacion_created_at con la fila insertada, para que el frontend pueda
+    nombrar el archivo exportado por id sin pegarle de nuevo al historial. No debe
+    romper la respuesta al usuario si falla (Supabase caído, RLS mal configurado,
+    etc.) — en ese caso resp queda sin id y el frontend cae a un nombre de archivo
+    por timestamp (ver export/filename.ts).
 
     `entrada` (solo para modos text/url) va embebida en el jsonb `resultado`,
     no en una columna nueva, para que "Retomar" pueda reconstruir la consulta
@@ -61,7 +65,7 @@ def _guardar_historial(
     primary = resp.classifications[0]
     producto = (resp.product.identified_name if resp.product else None) or fallback_producto
     try:
-        guardar_cotizacion(
+        row = guardar_cotizacion(
             user_id=user_id,
             producto=producto,
             ncm=primary.ncm,
@@ -71,6 +75,8 @@ def _guardar_historial(
                 "entrada": entrada.model_dump() if entrada else None,
             },
         )
+        resp.cotizacion_id = row.get("id")
+        resp.cotizacion_created_at = row.get("created_at")
     except Exception:
         logger.exception("No se pudo guardar la cotización en el historial.")
 

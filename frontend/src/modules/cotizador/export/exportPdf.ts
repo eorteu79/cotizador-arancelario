@@ -489,5 +489,5 @@ export async function exportCotizacionPdf(data: ExportData): Promise<void> {
 
   const docDefinition = buildDocDefinition(data, LOGO_HEADER_PNG_BASE64);
   const pdf = pdfMake.createPdf(docDefinition);
-  await pdf.download(`${exportFileBaseName(data.ncm, data.fechaIso)}.pdf`);
+  await pdf.download(`${exportFileBaseName(data.id, data.fechaIso)}.pdf`);
 }

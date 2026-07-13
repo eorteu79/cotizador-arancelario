@@ -129,6 +129,7 @@ function fromParts(
   fuente: Fuente,
   destino: CifInputs["destino"] | null,
   iibbPct: number | null,
+  id: string,
   cotizacionNumero: string,
   fechaIso: string,
   email: string,
@@ -137,6 +138,7 @@ function fromParts(
   const tributosAduaneros = b.derecho_importacion + b.tasa_estadistica + b.iva;
   const percepciones = b.iva_adicional + b.ganancias + b.iibb;
   return {
+    id,
     cotizacionNumero,
     fechaIso,
     email,
@@ -184,6 +186,11 @@ export function buildExportData(source: ExportDataSource): ExportData | null {
     const productoNombre = result.product?.identified_name ?? primary.description;
     const fuente: Fuente =
       FUENTE_BY_RATE_SOURCE[primary.rates_source.derecho_importacion] ?? "estimado";
+    const id = result.cotizacion_id ?? "";
+    // El guardado del historial es fire-and-forget en el backend: si falló,
+    // cotizacion_id/created_at vienen null y caemos a "ahora" — filename.ts ya
+    // sabe tratar id="" como el caso sin guardar.
+    const fechaIso = result.cotizacion_created_at ?? new Date().toISOString();
     return fromParts(
       primary,
       result.cost_breakdown,
@@ -191,8 +198,9 @@ export function buildExportData(source: ExportDataSource): ExportData | null {
       fuente,
       cif.destino,
       cif.iibb_pct,
-      shortNumeroFromNow(),
-      new Date().toISOString(),
+      id,
+      id ? shortNumeroFromId(id) : shortNumeroFromNow(),
+      fechaIso,
       email,
       result.vigencia_base
     );
@@ -211,6 +219,7 @@ export function buildExportData(source: ExportDataSource): ExportData | null {
     detail.fuente,
     (entrada?.destino as CifInputs["destino"]) ?? null,
     null,
+    detail.id,
     shortNumeroFromId(detail.id),
     detail.created_at,
     email,

@@ -1,10 +1,11 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
+from .core.auth import get_current_user  # noqa: E402
 from .core.config import GEMINI_API_KEY  # noqa: E402 (loads .env as a side effect)
 from .modules.cotizador.router import router as cotizador_router  # noqa: E402
 
@@ -35,3 +36,10 @@ def health():
         # by the Gemini migration); it now reflects GEMINI_API_KEY.
         "anthropic_key_configured": bool(GEMINI_API_KEY),
     }
+
+
+@app.get("/api/auth/whoami")
+def whoami(user: dict = Depends(get_current_user)):
+    # Reuses get_current_user (allowlist check included) so the frontend can probe
+    # authorization right after login instead of waiting for the first module call.
+    return {"email": user.get("email")}

@@ -1,5 +1,6 @@
+import { API_BASE } from "../../lib/apiBase";
 import { apiFetch } from "../../lib/apiClient";
-import { supabase } from "../../lib/supabaseClient";
+import { authHeader } from "../../lib/authHeader";
 import type {
   AnalyzeResponse,
   CifInputs,
@@ -7,12 +8,6 @@ import type {
   Mode,
 } from "./types";
 
-// In production the API is served on the same domain (Vercel rewrites /api/* to the
-// backend service), so the relative "/api" default works with no config. In local dev,
-// default to the FastAPI dev server directly. Override with VITE_API_BASE_URL if needed
-// (e.g. pointing a local frontend at a deployed backend).
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:8000/api" : "/api");
 const MODULE_BASE = `${API_BASE}/cotizador`;
 
 export interface AnalyzeArgs {
@@ -32,12 +27,6 @@ async function readError(res: Response): Promise<string> {
   } catch {
     return res.statusText || `HTTP ${res.status}`;
   }
-}
-
-async function authHeader(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {

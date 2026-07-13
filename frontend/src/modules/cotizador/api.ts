@@ -1,3 +1,4 @@
+import { apiFetch } from "../../lib/apiClient";
 import { supabase } from "../../lib/supabaseClient";
 import type {
   AnalyzeResponse,
@@ -50,7 +51,7 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
       cif: args.cif,
       clarifications: args.clarifications,
     };
-    const res = await fetch(`${MODULE_BASE}/analyze`, {
+    const res = await apiFetch(`${MODULE_BASE}/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),
@@ -67,7 +68,7 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
   fd.append("cif_json", JSON.stringify(args.cif));
   fd.append("clarifications_json", JSON.stringify(args.clarifications));
 
-  const res = await fetch(`${MODULE_BASE}/analyze/file`, {
+  const res = await apiFetch(`${MODULE_BASE}/analyze/file`, {
     method: "POST",
     headers: auth,
     body: fd,
@@ -77,7 +78,7 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
 }
 
 export async function health(): Promise<{ ok: boolean; anthropic_key_configured: boolean }> {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await apiFetch(`${API_BASE}/health`);
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }

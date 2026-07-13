@@ -1,25 +1,65 @@
 import json
+import logging
 from typing import List, Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import ValidationError
 
 from ...core.auth import get_current_user
 from .aranceles_db import VIGENCIA_BASE, lookup_ncm
 from .cost import compute_cost
 from .gemini_client import analyze_product
+from .historial import guardar_cotizacion, listar_cotizaciones, obtener_cotizacion
 from .schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     CifInputs,
     Classification,
     ClarificationQuestion,
+    HistorialDetail,
+    HistorialItem,
+    HistorialListResponse,
     ProductInfo,
     Rates,
     RateSource,
 )
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
+
+logger = logging.getLogger(__name__)
+
+# Un único campo (derecho_importacion) alcanza para derivar el badge de origen de
+# toda la cotización: es el único que _apply_base_rates puede marcar "verificar"
+# (sin dato en la base para esa posición); los demás son siempre base_oficial o
+# estimado_ia junto con él.
+FUENTE_BY_RATE_SOURCE = {
+    "base_oficial": "base",
+    "verificar": "sin_dato",
+    "estimado_ia": "estimado",
+}
+
+
+def _guardar_historial(user: dict, resp: AnalyzeResponse, fallback_producto: str) -> None:
+    """Guarda la cotización final en el historial. No debe romper la respuesta
+    al usuario si falla (Supabase caído, RLS mal configurado, etc.)."""
+    if resp.needs_clarification or not resp.classifications:
+        return
+    user_id = user.get("sub")
+    if not user_id:
+        return
+    primary = resp.classifications[0]
+    producto = (resp.product.identified_name if resp.product else None) or fallback_producto
+    try:
+        guardar_cotizacion(
+            user_id=user_id,
+            producto=producto,
+            ncm=primary.ncm,
+            fuente=FUENTE_BY_RATE_SOURCE.get(primary.rates_source.derecho_importacion, "estimado"),
+            resultado=resp.model_dump(),
+        )
+    except Exception:
+        logger.exception("No se pudo guardar la cotización en el historial.")
 
 
 DISCLAIMER = (
@@ -123,7 +163,7 @@ def _build_response(parsed: dict, cif: Optional[CifInputs]) -> AnalyzeResponse:
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-def analyze_json(req: AnalyzeRequest):
+def analyze_json(req: AnalyzeRequest, user: dict = Depends(get_current_user)):
     """Modes text y url (JSON body)."""
     if req.mode not in ("text", "url"):
         raise HTTPException(
@@ -147,7 +187,9 @@ def analyze_json(req: AnalyzeRequest):
     except Exception as e:
         raise HTTPException(500, f"Error al consultar Gemini: {e}")
 
-    return _build_response(parsed, req.cif)
+    resp = _build_response(parsed, req.cif)
+    _guardar_historial(user, resp, fallback_producto=(req.text or req.url or "Consulta"))
+    return resp
 
 
 @router.post("/analyze/file", response_model=AnalyzeResponse)
@@ -157,6 +199,7 @@ async def analyze_file(
     cif_json: Optional[str] = Form(None),
     clarifications_json: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
+    user: dict = Depends(get_current_user),
 ):
     """Modes pdf y image (multipart). cif_json y clarifications_json son strings JSON."""
     if mode not in ("pdf", "image"):
@@ -219,4 +262,43 @@ async def analyze_file(
     except Exception as e:
         raise HTTPException(500, f"Error al consultar Gemini: {e}")
 
-    return _build_response(parsed, cif)
+    resp = _build_response(parsed, cif)
+    _guardar_historial(user, resp, fallback_producto=(text or f"Archivo: {file.filename}"))
+    return resp
+
+
+@router.get("/historial", response_model=HistorialListResponse)
+def historial_list(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: dict = Depends(get_current_user),
+):
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Token sin 'sub'.")
+    try:
+        rows = listar_cotizaciones(user_id=user_id, limit=limit, offset=offset)
+    except Exception as e:
+        raise HTTPException(502, f"No se pudo leer el historial: {e}")
+    return HistorialListResponse(
+        items=[HistorialItem(**r) for r in rows], limit=limit, offset=offset
+    )
+
+
+@router.get("/historial/{cotizacion_id}", response_model=HistorialDetail)
+def historial_detail(cotizacion_id: str, user: dict = Depends(get_current_user)):
+    try:
+        UUID(cotizacion_id)
+    except ValueError:
+        raise HTTPException(404, "Cotización no encontrada.")
+
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Token sin 'sub'.")
+    try:
+        row = obtener_cotizacion(user_id=user_id, cotizacion_id=cotizacion_id)
+    except Exception as e:
+        raise HTTPException(502, f"No se pudo leer la cotización: {e}")
+    if row is None:
+        raise HTTPException(404, "Cotización no encontrada.")
+    return HistorialDetail(**row)

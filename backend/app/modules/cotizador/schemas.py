@@ -124,3 +124,26 @@ class AnalyzeResponse(BaseModel):
     notes: List[str] = []
     disclaimer: str = ""
     vigencia_base: str = ""
+
+
+class HistorialItem(BaseModel):
+    id: str
+    created_at: str
+    producto: str
+    ncm: Optional[str] = None
+    fuente: str
+
+
+class HistorialListResponse(BaseModel):
+    items: List[HistorialItem]
+    limit: int
+    offset: int
+
+
+class HistorialDetail(BaseModel):
+    id: str
+    created_at: str
+    producto: str
+    ncm: Optional[str] = None
+    fuente: str
+    resultado: AnalyzeResponse

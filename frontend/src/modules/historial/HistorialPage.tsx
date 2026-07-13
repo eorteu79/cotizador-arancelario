@@ -1,0 +1,207 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Results } from "../cotizador/CotizadorPage";
+import type { CifInputs } from "../cotizador/types";
+import { getHistorialDetail, listHistorial } from "./api";
+import type { HistorialDetail, HistorialItem } from "./types";
+
+const PAGE_SIZE = 50;
+
+const FUENTE_LABEL: Record<HistorialItem["fuente"], string> = {
+  base: "Base oficial",
+  estimado: "Estimado IA",
+  sin_dato: "Sin dato — verificar",
+};
+
+const FUENTE_CLASS: Record<HistorialItem["fuente"], string> = {
+  base: "src-tag src-base",
+  estimado: "src-tag src-ia",
+  sin_dato: "src-tag src-verificar",
+};
+
+function FuenteBadge({ fuente }: { fuente: HistorialItem["fuente"] }) {
+  return <span className={FUENTE_CLASS[fuente]}>{FUENTE_LABEL[fuente]}</span>;
+}
+
+function fmtFecha(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function truncar(s: string, n = 70): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+export default function HistorialPage() {
+  const navigate = useNavigate();
+
+  const [items, setItems] = useState<HistorialItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Tagged with the id they were fetched for, so switching selection never
+  // flashes the *previous* row's detail/error while the new one is loading.
+  const [detail, setDetail] = useState<HistorialDetail | null>(null);
+  const [detailError, setDetailError] = useState<{ id: string; message: string } | null>(null);
+
+  useEffect(() => {
+    listHistorial(PAGE_SIZE, 0)
+      .then((r) => {
+        setItems(r.items);
+        setOffset(r.items.length);
+        setHasMore(r.items.length === PAGE_SIZE);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    getHistorialDetail(selectedId)
+      .then(setDetail)
+      .catch((e) =>
+        setDetailError({ id: selectedId, message: e instanceof Error ? e.message : String(e) })
+      );
+  }, [selectedId]);
+
+  const showingDetail = detail?.id === selectedId ? detail : null;
+  const currentDetailError = detailError?.id === selectedId ? detailError.message : null;
+  const detailLoading = selectedId !== null && !showingDetail && !currentDetailError;
+
+  function onLoadMore() {
+    setLoadingMore(true);
+    listHistorial(PAGE_SIZE, offset)
+      .then((r) => {
+        setItems((prev) => [...(prev ?? []), ...r.items]);
+        setOffset(offset + r.items.length);
+        setHasMore(r.items.length === PAGE_SIZE);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoadingMore(false));
+  }
+
+  function onRetomar() {
+    if (!showingDetail) return;
+    const { resultado } = showingDetail;
+    const primary = resultado.classifications[0];
+    const text =
+      resultado.product?.summary ??
+      resultado.product?.identified_name ??
+      primary?.description ??
+      showingDetail.producto;
+    const cif: CifInputs | undefined = resultado.cost_breakdown
+      ? {
+          cif_value: resultado.cost_breakdown.cif_value,
+          currency: resultado.cost_breakdown.currency,
+          destino: "bien_cambio",
+          iibb_pct: 2.5,
+        }
+      : undefined;
+    navigate("/cotizador", { state: { retomar: { text, cif } } });
+  }
+
+  if (selectedId) {
+    return (
+      <div className="app">
+        <div className="header">
+          <div className="eyebrow">Historial de cotizaciones</div>
+          <h1>Detalle de la cotización</h1>
+          <div className="goldrule" />
+        </div>
+
+        <button
+          className="btn btn-secondary"
+          style={{ marginBottom: 20, flex: "0 0 auto" }}
+          onClick={() => setSelectedId(null)}
+        >
+          ← Volver al historial
+        </button>
+
+        {detailLoading && (
+          <div className="loader">
+            <div className="spinner" />
+            <span>Cargando cotización...</span>
+          </div>
+        )}
+
+        {currentDetailError && <div className="alert alert-error">{currentDetailError}</div>}
+
+        {showingDetail && (
+          <>
+            <div className="button-row" style={{ marginBottom: 20 }}>
+              <button className="btn" onClick={onRetomar}>
+                Retomar en el cotizador
+              </button>
+            </div>
+            <Results result={showingDetail.resultado} />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="eyebrow">Historial</div>
+        <h1>Cotizaciones anteriores</h1>
+        <p className="lead">Tus últimas cotizaciones, más recientes primero.</p>
+        <div className="goldrule" />
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {!error && items === null && (
+        <div className="loader">
+          <div className="spinner" />
+          <span>Cargando historial...</span>
+        </div>
+      )}
+
+      {items && items.length === 0 && (
+        <div className="card">
+          <p className="hint">Todavía no hiciste ninguna cotización.</p>
+        </div>
+      )}
+
+      {items && items.length > 0 && (
+        <>
+          <div className="card" style={{ padding: 0 }}>
+            <div className="hist-list">
+              {items.map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className="hist-row"
+                  onClick={() => setSelectedId(it.id)}
+                >
+                  <span className="hist-fecha">{fmtFecha(it.created_at)}</span>
+                  <span className="hist-producto">{truncar(it.producto)}</span>
+                  <span className="hist-ncm">{it.ncm ?? "—"}</span>
+                  <FuenteBadge fuente={it.fuente} />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {hasMore && (
+            <div className="button-row" style={{ marginTop: 16 }}>
+              <button className="btn btn-secondary" onClick={onLoadMore} disabled={loadingMore}>
+                {loadingMore ? "Cargando..." : "Cargar más"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

@@ -33,3 +33,14 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
 
   return res;
 }
+
+/** Extracts a readable message from a FastAPI-style {"detail": ...} error body. */
+export async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const j = await res.json();
+    if (j?.detail) return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    return JSON.stringify(j);
+  } catch {
+    return res.statusText || `HTTP ${res.status}`;
+  }
+}

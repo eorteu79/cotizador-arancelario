@@ -86,3 +86,13 @@ export interface AnalyzeResponse {
   disclaimer: string;
   vigencia_base: string;
 }
+
+/** Router `location.state` shape used by the "Retomar" button in /historial to
+ * prefill the cotizador with a past query (best-effort: the stored resultado
+ * doesn't keep the original mode/text/url/file, only the response). */
+export interface RetomarState {
+  retomar: {
+    text: string;
+    cif: CifInputs;
+  };
+}

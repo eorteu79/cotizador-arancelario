@@ -1,5 +1,5 @@
 import { API_BASE } from "../../lib/apiBase";
-import { apiFetch } from "../../lib/apiClient";
+import { apiFetch, readErrorDetail } from "../../lib/apiClient";
 import { authHeader } from "../../lib/authHeader";
 import type {
   AnalyzeResponse,
@@ -19,16 +19,6 @@ export interface AnalyzeArgs {
   clarifications: ClarificationAnswer[];
 }
 
-async function readError(res: Response): Promise<string> {
-  try {
-    const j = await res.json();
-    if (j?.detail) return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
-    return JSON.stringify(j);
-  } catch {
-    return res.statusText || `HTTP ${res.status}`;
-  }
-}
-
 export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
   const auth = await authHeader();
 
@@ -45,7 +35,7 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(await readError(res));
+    if (!res.ok) throw new Error(await readErrorDetail(res));
     return res.json();
   }
 
@@ -62,12 +52,12 @@ export async function analyze(args: AnalyzeArgs): Promise<AnalyzeResponse> {
     headers: auth,
     body: fd,
   });
-  if (!res.ok) throw new Error(await readError(res));
+  if (!res.ok) throw new Error(await readErrorDetail(res));
   return res.json();
 }
 
 export async function health(): Promise<{ ok: boolean; anthropic_key_configured: boolean }> {
   const res = await apiFetch(`${API_BASE}/health`);
-  if (!res.ok) throw new Error(await readError(res));
+  if (!res.ok) throw new Error(await readErrorDetail(res));
   return res.json();
 }

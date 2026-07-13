@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import CotizadorPage from "./cotizador/CotizadorPage";
+import HistorialPage from "./historial/HistorialPage";
 
 export interface ModuleDef {
   /** Route path, also used as the nav link target. */
@@ -16,4 +17,5 @@ export interface ModuleDef {
  */
 export const modules: ModuleDef[] = [
   { path: "/cotizador", label: "Cotizador", element: <CotizadorPage /> },
+  { path: "/historial", label: "Historial", element: <HistorialPage /> },
 ];

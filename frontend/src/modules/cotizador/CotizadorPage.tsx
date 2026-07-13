@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { analyze, health } from "./api";
 import type {
   AnalyzeResponse,
@@ -10,6 +11,7 @@ import type {
   Mode,
   Probability,
   RateFieldSource,
+  RetomarState,
 } from "./types";
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -34,11 +36,14 @@ function defaultCif(): CifInputs {
 }
 
 export default function CotizadorPage() {
+  const location = useLocation();
+  const retomar = (location.state as Partial<RetomarState> | null)?.retomar;
+
   const [mode, setMode] = useState<Mode>("text");
-  const [text, setText] = useState("");
+  const [text, setText] = useState(retomar?.text ?? "");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [cif, setCif] = useState<CifInputs>(defaultCif());
+  const [cif, setCif] = useState<CifInputs>(retomar?.cif ?? defaultCif());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
@@ -104,6 +109,13 @@ export default function CotizadorPage() {
         </p>
         <div className="goldrule" />
       </div>
+
+      {retomar && (
+        <div className="alert alert-warning">
+          Retomaste una cotización del historial. Revisá los datos precargados (la
+          descripción se generó a partir del resultado guardado) y volvé a analizar.
+        </div>
+      )}
 
       {keyOk === false && (
         <div className="alert alert-warning">
@@ -437,7 +449,7 @@ function Badge({ p }: { p: Probability }) {
   return <span className={`badge badge-${p}`}>{p}</span>;
 }
 
-function Results({ result }: { result: AnalyzeResponse }) {
+export function Results({ result }: { result: AnalyzeResponse }) {
   const { product, classifications, cost_breakdown, notes } = result;
   const primary = classifications[0];
   const alternatives = classifications.slice(1);

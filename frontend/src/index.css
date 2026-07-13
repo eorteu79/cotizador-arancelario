@@ -336,6 +336,10 @@ label {
   color: var(--gold);
 }
 
+.export-buttons {
+  margin-top: 20px;
+}
+
 /* ---------- file dropzone ---------- */
 .dropzone {
   border: 1.5px dashed var(--line);

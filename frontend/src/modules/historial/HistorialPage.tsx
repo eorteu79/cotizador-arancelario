@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/useAuth";
 import { Results } from "../cotizador/CotizadorPage";
 import { IIBB_DEFAULT_BY_DESTINO } from "../cotizador/constants";
 import type { CifInputs, Destino } from "../cotizador/types";
+import { buildExportData } from "../cotizador/export/buildExportData";
+import ExportButtons from "../cotizador/export/ExportButtons";
 import { getHistorialDetail, listHistorial } from "./api";
 import type { HistorialDetail, HistorialItem } from "./types";
 
@@ -42,6 +45,7 @@ function truncar(s: string, n = 70): string {
 
 export default function HistorialPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [items, setItems] = useState<HistorialItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +196,13 @@ export default function HistorialPage() {
             )}
 
             <Results result={showingDetail.resultado} />
+            <ExportButtons
+              data={buildExportData({
+                kind: "historial",
+                detail: showingDetail,
+                email: user?.email ?? "",
+              })}
+            />
           </>
         )}
       </div>

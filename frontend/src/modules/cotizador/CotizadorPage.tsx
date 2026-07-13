@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../../auth/useAuth";
 import { analyze, health } from "./api";
 import { IIBB_DEFAULT_BY_DESTINO } from "./constants";
+import { buildExportData } from "./export/buildExportData";
+import ExportButtons from "./export/ExportButtons";
 import type {
   AnalyzeResponse,
   CifInputs,
@@ -33,6 +36,7 @@ function defaultCif(): CifInputs {
 
 export default function CotizadorPage() {
   const location = useLocation();
+  const { user } = useAuth();
   const retomar = (location.state as Partial<RetomarState> | null)?.retomar;
 
   const [mode, setMode] = useState<Mode>(retomar?.mode ?? "text");
@@ -224,7 +228,14 @@ export default function CotizadorPage() {
         </div>
       )}
 
-      {result && !result.needs_clarification && <Results result={result} />}
+      {result && !result.needs_clarification && (
+        <>
+          <Results result={result} />
+          <ExportButtons
+            data={buildExportData({ kind: "live", result, cif, email: user?.email ?? "" })}
+          />
+        </>
+      )}
 
       <footer className="footer">
         <div>

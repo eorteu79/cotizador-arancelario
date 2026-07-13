@@ -223,13 +223,15 @@ function buildRateCards(data: ExportData): Content {
         stack: [
           { text: rc.label.toUpperCase(), color: COLORS.muted, fontSize: 7, bold: true },
           {
-            text: fmtPct(rc.pct),
+            text: rc.ajustado ? `${fmtPct(rc.pct)} *` : fmtPct(rc.pct),
             color: RATE_CARD_COLOR[rc.color],
             bold: true,
             fontSize: 15,
             margin: [0, 5, 0, 6],
           },
-          badge(badgeInfo.label, badgeInfo.color, { fontSize: 6 }),
+          // 'ajustado' se marca solo con el asterisco de arriba (sutil, sin
+          // badge de color nuevo) — ver la nota al pie que agrega buildPie.
+          rc.ajustado ? { text: "" } : badge(badgeInfo.label, badgeInfo.color, { fontSize: 6 }),
         ],
       };
     }),
@@ -388,6 +390,17 @@ function buildPie(data: ExportData): Content[] {
                   fontSize: 8,
                   lineHeight: 1.3,
                 },
+                ...(data.tieneAjustes
+                  ? [
+                      {
+                        text: "* Valor ajustado por Tailwind.",
+                        color: COLORS.muted,
+                        fontSize: 8,
+                        italics: true,
+                        margin: [0, 4, 0, 0] as [number, number, number, number],
+                      },
+                    ]
+                  : []),
               ],
               margin: [10, 4, 0, 4],
             },

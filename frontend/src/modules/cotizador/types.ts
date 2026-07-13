@@ -21,7 +21,7 @@ export interface Rates {
   ganancias_pct: number;
 }
 
-export type RateFieldSource = "base_oficial" | "estimado_ia" | "verificar";
+export type RateFieldSource = "base_oficial" | "estimado_ia" | "verificar" | "ajuste";
 
 export interface RateSource {
   derecho_importacion: RateFieldSource;
@@ -41,6 +41,8 @@ export interface Classification {
   rates_source: RateSource;
   base_match: boolean;
   nota_base: string | null;
+  reclasificado_por_usuario: boolean;
+  ajuste_manual: boolean;
 }
 
 export interface ProductInfo {

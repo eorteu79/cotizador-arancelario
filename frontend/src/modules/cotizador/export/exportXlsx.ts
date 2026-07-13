@@ -200,17 +200,25 @@ export async function exportCotizacionXlsx(data: ExportData): Promise<void> {
       bold: true,
       size: 15,
       color: RATE_CARD_COLOR[rc.color],
-      numFmt: PCT_FMT,
+      numFmt: rc.ajustado ? `${PCT_FMT} "*"` : PCT_FMT,
       border: { left: COLORS.rule },
     });
-    const b = FUENTE_BADGE[rc.fuente];
-    set(ws, `${cardCols[i]}22`, b.label, {
-      bold: true,
-      size: 7,
-      color: b.color,
-      fill: BADGE_FILL[rc.fuente],
-      border: { bottom: COLORS.rule, left: COLORS.rule },
-    });
+    // 'ajustado' se marca solo con el asterisco del numFmt de arriba (sutil,
+    // sin badge de color nuevo) — ver la nota al pie que agrega AVISO_TEXT.
+    if (rc.ajustado) {
+      set(ws, `${cardCols[i]}22`, "", {
+        border: { bottom: COLORS.rule, left: COLORS.rule },
+      });
+    } else {
+      const b = FUENTE_BADGE[rc.fuente];
+      set(ws, `${cardCols[i]}22`, b.label, {
+        bold: true,
+        size: 7,
+        color: b.color,
+        fill: BADGE_FILL[rc.fuente],
+        border: { bottom: COLORS.rule, left: COLORS.rule },
+      });
+    }
   });
   // Cierra el box de tarjetas con un borde derecho luego de la última columna (F).
   for (const row of [20, 21, 22] as const) {
@@ -301,7 +309,10 @@ export async function exportCotizacionXlsx(data: ExportData): Promise<void> {
   ws.getRow(r).height = 16;
   ws.getRow(r + 1).height = 16;
   ws.getRow(r + 2).height = 16;
-  mergeSet(ws, `B${r}:F${r + 2}`, AVISO_TEXT, {
+  const avisoTexto = data.tieneAjustes
+    ? `${AVISO_TEXT} * Valor ajustado por Tailwind.`
+    : AVISO_TEXT;
+  mergeSet(ws, `B${r}:F${r + 2}`, avisoTexto, {
     size: 8.5,
     color: COLORS.muted,
     valign: "top",

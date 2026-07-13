@@ -1,6 +1,6 @@
 import type { AnalyzeResponse } from "../cotizador/types";
 
-export type Fuente = "base" | "estimado" | "sin_dato";
+export type Fuente = "base" | "estimado" | "sin_dato" | "ajuste";
 
 /** Input original de una cotización en modo texto/url, guardado para que
  * "Retomar" sea exacto. Nula para pdf/foto (no se guarda ese input). */

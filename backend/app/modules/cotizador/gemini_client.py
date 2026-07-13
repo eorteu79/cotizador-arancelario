@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from google import genai
 from google.genai import errors, types
 
-from .prompts import SYSTEM_PROMPT
+from .prompts import get_active_prompt
 
 
 _client: Optional[genai.Client] = None
@@ -135,7 +135,7 @@ def call_gemini(parts: List[Any]) -> str:
     """
     client = get_client()
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
+        system_instruction=get_active_prompt(),
         max_output_tokens=MAX_OUTPUT_TOKENS,
         tools=[types.Tool(google_search=types.GoogleSearch())],
     )

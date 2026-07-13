@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { upsertOverride } from "../admin/api";
+import type { OverrideIn } from "../admin/types";
 import { useAuth } from "../../auth/useAuth";
-import { analyze, health } from "./api";
+import { useRole } from "../../auth/useRole";
+import { ajusteManual, analyze, health, reclasificar, type CampoCorregible } from "./api";
 import { IIBB_DEFAULT_BY_DESTINO } from "./constants";
 import { buildExportData } from "./export/buildExportData";
 import ExportButtons from "./export/ExportButtons";
@@ -230,7 +233,7 @@ export default function CotizadorPage() {
 
       {result && !result.needs_clarification && (
         <>
-          <Results result={result} />
+          <Results result={result} editable={{ cif, onUpdated: setResult }} />
           <ExportButtons
             data={buildExportData({ kind: "live", result, cif, email: user?.email ?? "" })}
           />
@@ -460,7 +463,12 @@ function Badge({ p }: { p: Probability }) {
   return <span className={`badge badge-${p}`}>{p}</span>;
 }
 
-export function Results({ result }: { result: AnalyzeResponse }) {
+export interface EditableCtx {
+  cif: CifInputs;
+  onUpdated: (r: AnalyzeResponse) => void;
+}
+
+export function Results({ result, editable }: { result: AnalyzeResponse; editable?: EditableCtx }) {
   const { product, classifications, cost_breakdown, notes } = result;
   const primary = classifications[0];
   const alternatives = classifications.slice(1);
@@ -512,6 +520,9 @@ export function Results({ result }: { result: AnalyzeResponse }) {
                 <p className="sim-rationale">{primary.rationale}</p>
               )}
             </div>
+            {editable && (
+              <ClasificacionActions result={result} primary={primary} editable={editable} />
+            )}
           </div>
 
           <div className="card">
@@ -562,6 +573,7 @@ export function Results({ result }: { result: AnalyzeResponse }) {
                 <strong>Nota de la base oficial:</strong> {primary.nota_base}
               </p>
             )}
+            <AjusteFootnote visible={Object.values(primary.rates_source).some((s) => s === "ajuste")} />
             {primary.requirements && primary.requirements.length > 0 && (
               <>
                 <div className="subhead">Requisitos / cosas a tener en cuenta</div>
@@ -617,7 +629,245 @@ export function Results({ result }: { result: AnalyzeResponse }) {
   );
 }
 
+const CAMPO_LABELS: Record<CampoCorregible, string> = {
+  derecho_importacion_pct: "Derecho de Importación",
+  tasa_estadistica_pct: "Tasa Estadística",
+  iva_pct: "IVA",
+  iva_adicional_pct: "IVA adicional (percepción)",
+  ganancias_pct: "Ganancias (percepción)",
+};
+
+/** Campo -> columna de aranceles_overrides que puede promoverse a "regla
+ * futura" (fase 5.4). IVA adicional y Ganancias no tienen columna propia en
+ * el override (se derivan de iva/iva_reducido, o no están en el schema). */
+const CAMPO_A_OVERRIDE_FIELD: Partial<Record<CampoCorregible, keyof Pick<OverrideIn, "die_aec" | "tasa_estadistica" | "iva">>> = {
+  derecho_importacion_pct: "die_aec",
+  tasa_estadistica_pct: "tasa_estadistica",
+  iva_pct: "iva",
+};
+
+/** Fase 5.4 — "Reclasificar" (cualquier usuario) y "Corregir número" +
+ * "Aplicar a futuras" (solo superadmin), sobre la clasificación primaria de
+ * la cotización en vivo. Solo se muestra cuando el caller (CotizadorPage)
+ * pasa `editable` — el historial no lo pasa, así que ahí no aparece. */
+function ClasificacionActions({
+  result,
+  primary,
+  editable,
+}: {
+  result: AnalyzeResponse;
+  primary: Classification;
+  editable: EditableCtx;
+}) {
+  const { role } = useRole();
+  const [mode, setMode] = useState<"none" | "reclasificar" | "corregir">("none");
+  const [ncmInput, setNcmInput] = useState("");
+  const [campo, setCampo] = useState<CampoCorregible>("derecho_importacion_pct");
+  const [valor, setValor] = useState<string>("");
+  const [aplicarFuturas, setAplicarFuturas] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function cerrar() {
+    setMode("none");
+    setError(null);
+    setNcmInput("");
+    setValor("");
+    setAplicarFuturas(false);
+  }
+
+  async function onSubmitReclasificar() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await reclasificar({
+        ncm: ncmInput,
+        producto: result.product?.identified_name ?? primary.description,
+        cif: editable.cif,
+      });
+      editable.onUpdated(r);
+      cerrar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSubmitCorregir() {
+    if (!result.cotizacion_id) {
+      setError("Esta cotización todavía no se guardó en el historial; no se puede corregir.");
+      return;
+    }
+    const num = parseFloat(valor);
+    if (Number.isNaN(num)) {
+      setError("Ingresá un número válido.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await ajusteManual(result.cotizacion_id, campo, num);
+      const resultado = updated.resultado as AnalyzeResponse;
+      editable.onUpdated({
+        ...resultado,
+        cotizacion_id: updated.id,
+        cotizacion_created_at: updated.created_at,
+      });
+
+      const overrideField = CAMPO_A_OVERRIDE_FIELD[campo];
+      if (aplicarFuturas && overrideField) {
+        await upsertOverride(primary.ncm, {
+          die_aec: null,
+          tasa_estadistica: null,
+          iva: null,
+          iva_reducido: null,
+          nota: `Promovido desde corrección puntual de la cotización ${result.cotizacion_id}.`,
+          vigencia: null,
+          [overrideField]: num,
+        } as OverrideIn);
+      }
+      cerrar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const puedePromover = CAMPO_A_OVERRIDE_FIELD[campo] !== undefined;
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      {mode === "none" && (
+        <div className="row gap8 wrapf">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ flex: "0 0 auto" }}
+            onClick={() => setMode("reclasificar")}
+          >
+            Reclasificar
+          </button>
+          {role === "superadmin" && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ flex: "0 0 auto" }}
+              onClick={() => setMode("corregir")}
+            >
+              Corregir número
+            </button>
+          )}
+        </div>
+      )}
+
+      {mode === "reclasificar" && (
+        <div className="note-box">
+          <label htmlFor="reclas-ncm">Nuevo NCM</label>
+          <div className="row gap8" style={{ alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <input
+                id="reclas-ncm"
+                value={ncmInput}
+                onChange={(e) => setNcmInput(e.target.value)}
+                placeholder="8516.79.90"
+              />
+            </div>
+            <button className="btn" style={{ flex: "0 0 auto" }} disabled={busy} onClick={onSubmitReclasificar}>
+              {busy ? "Reclasificando..." : "Confirmar"}
+            </button>
+            <button className="btn btn-secondary" style={{ flex: "0 0 auto" }} disabled={busy} onClick={cerrar}>
+              Cancelar
+            </button>
+          </div>
+          <div className="hint">
+            Se busca ese NCM en la base oficial (+ overrides) y se recalcula el costo. Queda guardado
+            como una cotización nueva en el historial.
+          </div>
+          {error && <div className="alert alert-error" style={{ marginTop: 10 }}>{error}</div>}
+        </div>
+      )}
+
+      {mode === "corregir" && (
+        <div className="note-box">
+          <div className="grid grid-3">
+            <div>
+              <label htmlFor="corr-campo">Campo</label>
+              <select
+                id="corr-campo"
+                value={campo}
+                onChange={(e) => setCampo(e.target.value as CampoCorregible)}
+              >
+                {(Object.keys(CAMPO_LABELS) as CampoCorregible[]).map((c) => (
+                  <option key={c} value={c}>
+                    {CAMPO_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="corr-valor">Nuevo valor (%)</label>
+              <input
+                id="corr-valor"
+                type="number"
+                step={0.1}
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+              />
+            </div>
+          </div>
+          {puedePromover && (
+            <div className="row gap8" style={{ marginTop: 14 }}>
+              <input
+                id="corr-futuras"
+                type="checkbox"
+                checked={aplicarFuturas}
+                onChange={(e) => setAplicarFuturas(e.target.checked)}
+              />
+              <label htmlFor="corr-futuras" style={{ marginBottom: 0 }}>
+                Aplicar también a futuras cotizaciones de este NCM ({primary.ncm})
+              </label>
+            </div>
+          )}
+          <div className="button-row" style={{ marginTop: 14 }}>
+            <button className="btn" disabled={busy || valor === ""} onClick={onSubmitCorregir}>
+              {busy ? "Guardando..." : "Confirmar corrección"}
+            </button>
+            <button className="btn btn-secondary" disabled={busy} onClick={cerrar}>
+              Cancelar
+            </button>
+          </div>
+          <div className="hint">
+            Esta corrección afecta SOLO a esta cotización, salvo que marques "aplicar a futuras".
+          </div>
+          {error && <div className="alert alert-error" style={{ marginTop: 10 }}>{error}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Marca subtle para un valor que viene de un override o de una corrección
+ * manual (fase 5.4): asterisco sutil junto al número, NO un badge de color
+ * nuevo — la aclaración va una sola vez al pie de la sección (ver
+ * AjusteFootnote). */
+function AjusteAsterisco() {
+  return (
+    <span className="ajuste-asterisco" title="Valor ajustado por Tailwind — ver aclaración al pie.">
+      {" "}
+      *
+    </span>
+  );
+}
+
+function AjusteFootnote({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return <p className="hint ajuste-footnote">* Valor ajustado por Tailwind.</p>;
+}
+
 function SourceTag({ source }: { source: RateFieldSource }) {
+  if (source === "ajuste") return null;
   if (source === "base_oficial") {
     return <span className="src-tag src-base">Base oficial</span>;
   }
@@ -648,7 +898,9 @@ function Tf({
   return (
     <div className="tf">
       <span className="k">{label}</span>
-      <span className={`v ${color}`}>{Number(v).toFixed(1)}%</span>
+      <span className={`v ${color}`}>
+        {Number(v).toFixed(1)}%{source === "ajuste" && <AjusteAsterisco />}
+      </span>
       <br />
       <SourceTag source={source} />
     </div>
@@ -683,6 +935,7 @@ function AltClassification({ c }: { c: Classification }) {
           <strong>Nota de la base oficial:</strong> {c.nota_base}
         </div>
       )}
+      <AjusteFootnote visible={Object.values(c.rates_source).some((s) => s === "ajuste")} />
       {c.requirements && c.requirements.length > 0 && (
         <>
           <div className="subhead">Requisitos</div>
@@ -711,7 +964,9 @@ function Kv({
   return (
     <span className="kv">
       <span className="kv-label">{label} </span>
-      <b className={cls}>{Number(v).toFixed(1)}%</b>{" "}
+      <b className={cls}>
+        {Number(v).toFixed(1)}%{source === "ajuste" && <AjusteAsterisco />}
+      </b>{" "}
       <SourceTag source={source} />
     </span>
   );

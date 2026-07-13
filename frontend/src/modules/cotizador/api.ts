@@ -61,3 +61,48 @@ export async function health(): Promise<{ ok: boolean; anthropic_key_configured:
   if (!res.ok) throw new Error(await readErrorDetail(res));
   return res.json();
 }
+
+/** Fase 5.4 — elegir otro NCM para la cotización (cualquier usuario). El
+ * backend hace el lookup oficial (base + overrides), no vuelve a llamar a
+ * Gemini, y guarda una fila nueva en el historial. */
+export async function reclasificar(args: {
+  ncm: string;
+  producto: string;
+  cif: CifInputs;
+}): Promise<AnalyzeResponse> {
+  const auth = await authHeader();
+  const res = await apiFetch(`${MODULE_BASE}/reclasificar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...auth },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(await readErrorDetail(res));
+  return res.json();
+}
+
+export type CampoCorregible =
+  | "derecho_importacion_pct"
+  | "tasa_estadistica_pct"
+  | "iva_pct"
+  | "iva_adicional_pct"
+  | "ganancias_pct";
+
+/** Fase 5.4 — corrección puntual a mano (solo superadmin): sobrescribe un
+ * único número SOLO para esta cotización ya guardada en el historial. */
+export async function ajusteManual(
+  cotizacionId: string,
+  campo: CampoCorregible,
+  valor: number
+): Promise<import("../historial/types").HistorialDetail> {
+  const auth = await authHeader();
+  const res = await apiFetch(
+    `${MODULE_BASE}/historial/${encodeURIComponent(cotizacionId)}/ajuste`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ campo, valor }),
+    }
+  );
+  if (!res.ok) throw new Error(await readErrorDetail(res));
+  return res.json();
+}

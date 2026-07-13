@@ -36,6 +36,27 @@ class AnalyzeRequest(BaseModel):
     cif: Optional[CifInputs] = None
 
 
+class ReclasificarRequest(BaseModel):
+    """Fase 5.4 — elegir otro NCM para la cotización (cualquier usuario). El
+    backend hace el lookup oficial (base + overrides) del NCM elegido; no
+    vuelve a llamar a Gemini."""
+
+    ncm: str = Field(..., description="NCM elegido por el usuario (con o sin puntos)")
+    producto: str = Field(..., description="Nombre del producto, para el historial")
+    cif: CifInputs
+
+
+class AjusteManualRequest(BaseModel):
+    """Fase 5.4 — corrección puntual a mano (solo superadmin), aplicada SOLO a
+    una cotización ya guardada en el historial."""
+
+    campo: str = Field(
+        ...,
+        description="derecho_importacion_pct | tasa_estadistica_pct | iva_pct | iva_adicional_pct | ganancias_pct",
+    )
+    valor: float
+
+
 class ClarificationQuestion(BaseModel):
     id: str
     question: str
@@ -64,8 +85,10 @@ class Rates(BaseModel):
 
 class RateSource(BaseModel):
     """Per-field origin of each rate: 'base_oficial' (official DB), 'estimado_ia' (Gemini,
-    NCM not found in the base) or 'verificar' (NCM found in the base but this specific
-    field — currently only die_aec for ~950 positions — has no data there)."""
+    NCM not found in the base), 'verificar' (NCM found in the base but this specific
+    field — currently only die_aec for ~950 positions — has no data there) or 'ajuste'
+    (Fase 5.4: el valor viene de un override superadmin o de una corrección manual
+    puntual — el front lo marca con un asterisco sutil, sin badge de color nuevo)."""
 
     derecho_importacion: str = "estimado_ia"
     tasa_estadistica: str = "estimado_ia"
@@ -87,6 +110,12 @@ class Classification(BaseModel):
     )
     nota_base: Optional[str] = Field(
         None, description="Observación de la base oficial para este NCM, si existe."
+    )
+    reclasificado_por_usuario: bool = Field(
+        False, description="True si esta clasificación viene de 'Reclasificar' (fase 5.4), no de Gemini."
+    )
+    ajuste_manual: bool = Field(
+        False, description="True si algún campo de esta clasificación fue corregido a mano por un superadmin (fase 5.4), solo para esta cotización puntual."
     )
 
 

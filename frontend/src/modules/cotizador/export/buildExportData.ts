@@ -8,6 +8,7 @@ const FUENTE_BY_RATE_SOURCE: Record<RateFieldSource, Fuente> = {
   base_oficial: "base",
   verificar: "sin_dato",
   estimado_ia: "estimado",
+  ajuste: "ajuste",
 };
 
 const DESTINO_LABEL: Record<string, string> = {
@@ -38,6 +39,7 @@ function rateCards(primary: Classification): RateCardData[] {
       pct: primary.rates.derecho_importacion_pct,
       color: "navy",
       fuente: FUENTE_BY_RATE_SOURCE[primary.rates_source.derecho_importacion],
+      ajustado: primary.rates_source.derecho_importacion === "ajuste",
     },
     {
       key: "te",
@@ -45,6 +47,7 @@ function rateCards(primary: Classification): RateCardData[] {
       pct: primary.rates.tasa_estadistica_pct,
       color: "gold",
       fuente: FUENTE_BY_RATE_SOURCE[primary.rates_source.tasa_estadistica],
+      ajustado: primary.rates_source.tasa_estadistica === "ajuste",
     },
     {
       key: "iva",
@@ -52,6 +55,7 @@ function rateCards(primary: Classification): RateCardData[] {
       pct: primary.rates.iva_pct,
       color: "burg",
       fuente: FUENTE_BY_RATE_SOURCE[primary.rates_source.iva],
+      ajustado: primary.rates_source.iva === "ajuste",
     },
     {
       key: "iva_adicional",
@@ -59,6 +63,7 @@ function rateCards(primary: Classification): RateCardData[] {
       pct: primary.rates.iva_adicional_pct,
       color: "navy",
       fuente: FUENTE_BY_RATE_SOURCE[primary.rates_source.iva_adicional],
+      ajustado: primary.rates_source.iva_adicional === "ajuste",
     },
     {
       key: "ganancias",
@@ -66,6 +71,7 @@ function rateCards(primary: Classification): RateCardData[] {
       pct: primary.rates.ganancias_pct,
       color: "gold",
       fuente: FUENTE_BY_RATE_SOURCE[primary.rates_source.ganancias],
+      ajustado: primary.rates_source.ganancias === "ajuste",
     },
   ];
 }
@@ -137,6 +143,7 @@ function fromParts(
 ): ExportData {
   const tributosAduaneros = b.derecho_importacion + b.tasa_estadistica + b.iva;
   const percepciones = b.iva_adicional + b.ganancias + b.iibb;
+  const cards = rateCards(primary);
   return {
     id,
     cotizacionNumero,
@@ -150,7 +157,8 @@ function fromParts(
     destino: destino ?? null,
     destinoLabel: destino ? DESTINO_LABEL[destino] ?? destino : "—",
     iibbPct,
-    rateCards: rateCards(primary),
+    rateCards: cards,
+    tieneAjustes: cards.some((rc) => rc.ajustado),
     desglose: desglose(b, iibbPct),
     totales: {
       cifValue: b.cif_value,

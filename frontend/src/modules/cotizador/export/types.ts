@@ -3,7 +3,7 @@ import type { Destino } from "../types";
 /** Badge de procedencia de un dato: viene de la base arancelaria oficial, es un
  * estimado del modelo, o la base no tiene el dato y también se estima. Mismo
  * mapeo que usa el backend (FUENTE_BY_RATE_SOURCE) para no duplicar criterios. */
-export type Fuente = "base" | "estimado" | "sin_dato";
+export type Fuente = "base" | "estimado" | "sin_dato" | "ajuste";
 
 export interface RateCardData {
   key: "di" | "te" | "iva" | "iva_adicional" | "ganancias";
@@ -11,6 +11,10 @@ export interface RateCardData {
   pct: number;
   color: "navy" | "gold" | "burg";
   fuente: Fuente;
+  /** Fase 5.4: true si este campo puntual viene de un override o de una
+   * corrección manual — se marca con un asterisco sutil en vez del badge de
+   * fuente (ver ExportData.ajustado para la nota al pie). */
+  ajustado: boolean;
 }
 
 export interface DesgloseRow {
@@ -47,6 +51,9 @@ export interface ExportData {
 
   rateCards: RateCardData[];
   desglose: DesgloseRow[];
+  /** Fase 5.4: true si algún rateCard tiene ajustado=true — dispara la nota
+   * al pie "* Valor ajustado por Tailwind." en los exports. */
+  tieneAjustes: boolean;
 
   totales: {
     cifValue: number;

@@ -691,6 +691,23 @@ label {
   cursor: help;
 }
 
+.src-tag.src-ajuste {
+  background: rgba(184, 134, 47, 0.14);
+  color: var(--gold-deep);
+  border: 1px solid var(--goldline);
+}
+
+/* ---------- ajuste (fase 5.4): asterisco sutil, sin badge de color ---------- */
+.ajuste-asterisco {
+  color: var(--gold-deep);
+  font-weight: 800;
+}
+
+.ajuste-footnote {
+  font-style: italic;
+  margin-top: 8px;
+}
+
 /* ---------- requirements / subhead ---------- */
 .requirements {
   list-style: none;

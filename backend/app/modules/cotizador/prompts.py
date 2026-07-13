@@ -1,4 +1,4 @@
-SYSTEM_PROMPT = """\
+DEFAULT_PROMPT = """\
 Sos un experto en clasificación arancelaria de la Nomenclatura Común del Mercosur (NCM) y en \
 liquidación de tributos de importación en Argentina. Tu rol es ayudar a estimar el costo de \
 ingreso de un producto a la Argentina.
@@ -95,3 +95,169 @@ registradas en los bloques previos de la respuesta; el último bloque de texto d
 - Si una NCM tiene una particularidad (ej. exenta de IVA adic, alícuota reducida), reflejalo en `rates` y mencionalo en `requirements` o `notes`.
 - No inventes posiciones NCM. Si no estás seguro, decilo en `clarification_questions` o en `notes`.
 """
+
+# ---------------------------------------------------------------------------
+# Fase 5.4 — prompt versionado en public.gemini_prompts (solo superadmin lo
+# edita desde /admin). DEFAULT_PROMPT de arriba queda como fallback si la
+# tabla está vacía (se usa para sembrarla) o si Supabase falla en tiempo real.
+# ---------------------------------------------------------------------------
+
+import logging
+import time
+from typing import Any, Dict, List, Optional
+
+import httpx
+
+from ...core.supabase_rest import rest_headers, table_url
+
+_logger = logging.getLogger("gemini_prompts")
+
+PROMPTS_TABLE = "gemini_prompts"
+
+_ACTIVE_CACHE_TTL_S = 60.0
+_active_cache: Optional[Dict[str, Any]] = None
+_active_cache_at: float = 0.0
+
+
+def _seed_if_empty() -> Optional[Dict[str, Any]]:
+    resp = httpx.get(
+        table_url(PROMPTS_TABLE), headers=rest_headers(), params={"select": "id", "limit": 1}, timeout=10
+    )
+    resp.raise_for_status()
+    if resp.json():
+        return None  # la tabla ya tiene filas, pero ninguna activa (no debería pasar)
+    seed_row = {
+        "version": 1,
+        "contenido": DEFAULT_PROMPT,
+        "activo": True,
+        "created_by": "seed",
+    }
+    resp = httpx.post(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(Prefer="return=representation"),
+        json=seed_row,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()[0]
+
+
+def _fetch_active_row() -> Optional[Dict[str, Any]]:
+    resp = httpx.get(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(),
+        params={"select": "id,version,contenido,created_by,created_at", "activo": "eq.true", "limit": 1},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if rows:
+        return rows[0]
+    return _seed_if_empty()
+
+
+def get_active_prompt() -> str:
+    """Prompt activo con cache de ~60s (se consulta en cada /analyze). Si
+    Supabase falla, cae a DEFAULT_PROMPT y loguea — nunca rompe la
+    clasificación por un problema en la tabla de prompts."""
+    global _active_cache, _active_cache_at
+    now = time.time()
+    if now - _active_cache_at > _ACTIVE_CACHE_TTL_S:
+        try:
+            row = _fetch_active_row()
+            if row is not None:
+                _active_cache = row
+            _active_cache_at = now
+        except Exception:
+            _logger.warning("No se pudo leer el prompt activo de gemini_prompts; se usa DEFAULT_PROMPT.")
+    if _active_cache is None:
+        return DEFAULT_PROMPT
+    return _active_cache.get("contenido") or DEFAULT_PROMPT
+
+
+def invalidate_active_prompt_cache() -> None:
+    """Llamado tras crear una versión nueva o activar una existente, para que
+    rija de inmediato en vez de esperar el TTL."""
+    global _active_cache_at
+    _active_cache_at = 0.0
+
+
+def get_active_prompt_row() -> Optional[Dict[str, Any]]:
+    """Para el admin: fila activa completa (id/version/contenido/etc.), sin
+    cache — siempre pega a Supabase (se usa solo al abrir el panel)."""
+    resp = httpx.get(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(),
+        params={"select": "id,version,contenido,created_by,created_at", "activo": "eq.true", "limit": 1},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if rows:
+        return rows[0]
+    return _seed_if_empty()
+
+
+def list_prompt_versions() -> List[Dict[str, Any]]:
+    resp = httpx.get(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(),
+        params={
+            "select": "id,version,contenido,activo,created_by,created_at",
+            "order": "version.desc",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_prompt_version(contenido: str, created_by: str) -> Dict[str, Any]:
+    """Crea una nueva versión activa (desactiva la anterior primero, ya que
+    hay un índice único parcial sobre activo=true)."""
+    versions = list_prompt_versions()
+    next_version = (max((v["version"] for v in versions), default=0)) + 1
+
+    resp = httpx.patch(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(),
+        params={"activo": "eq.true"},
+        json={"activo": False},
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+    resp = httpx.post(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(Prefer="return=representation"),
+        json={"version": next_version, "contenido": contenido, "activo": True, "created_by": created_by},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    invalidate_active_prompt_cache()
+    return resp.json()[0]
+
+
+def activar_prompt_version(prompt_id: str) -> Dict[str, Any]:
+    resp = httpx.patch(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(),
+        params={"activo": "eq.true"},
+        json={"activo": False},
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+    resp = httpx.patch(
+        table_url(PROMPTS_TABLE),
+        headers=rest_headers(Prefer="return=representation"),
+        params={"id": f"eq.{prompt_id}"},
+        json={"activo": True},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if not rows:
+        raise RuntimeError("Versión de prompt no encontrada.")
+    invalidate_active_prompt_cache()
+    return rows[0]

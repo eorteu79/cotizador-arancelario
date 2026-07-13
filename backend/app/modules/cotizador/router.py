@@ -6,12 +6,20 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import ValidationError
 
+from ...core.access_control import require_superadmin
 from ...core.auth import get_current_user
-from .aranceles_db import VIGENCIA_BASE, lookup_ncm
+from .aranceles_db import VIGENCIA_BASE, format_ncm, resolve_ncm
 from .cost import compute_cost
 from .gemini_client import analyze_product
-from .historial import guardar_cotizacion, listar_cotizaciones, obtener_cotizacion
+from .historial import (
+    actualizar_cotizacion,
+    guardar_cotizacion,
+    listar_cotizaciones,
+    obtener_cotizacion,
+    obtener_cotizacion_admin,
+)
 from .schemas import (
+    AjusteManualRequest,
     AnalyzeRequest,
     AnalyzeResponse,
     CifInputs,
@@ -24,6 +32,7 @@ from .schemas import (
     ProductInfo,
     Rates,
     RateSource,
+    ReclasificarRequest,
 )
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -33,11 +42,13 @@ logger = logging.getLogger(__name__)
 # Un único campo (derecho_importacion) alcanza para derivar el badge de origen de
 # toda la cotización: es el único que _apply_base_rates puede marcar "verificar"
 # (sin dato en la base para esa posición); los demás son siempre base_oficial o
-# estimado_ia junto con él.
+# estimado_ia junto con él. 'ajuste' (fase 5.4) se agrega cuando ese campo viene
+# de un override o de una reclasificación/corrección manual.
 FUENTE_BY_RATE_SOURCE = {
     "base_oficial": "base",
     "verificar": "sin_dato",
     "estimado_ia": "estimado",
+    "ajuste": "ajuste",
 }
 
 
@@ -88,21 +99,25 @@ DISCLAIMER = (
 
 
 def _apply_base_rates(classification: Classification) -> Classification:
-    """Cross-reference the NCM Gemini suggested against the tariff base (fase 3b: 10.242 posiciones).
+    """Cross-reference the NCM Gemini suggested against the tariff base (fase 3b: 10.242
+    posiciones) + la capa de overrides administrable (fase 5.4).
 
     Gemini keeps suggesting the position, description, alternatives and requirements.
     If the NCM is found in the base, tasa estadística, IVA and the reduced-IVA flag
     (which feeds the IVA adicional percepción) are always overridden with the official
-    base values. DIE is overridden too, unless the base has it empty (~950 positions,
-    e.g. live animals) — in that case Gemini's estimated DIE is kept but flagged
-    "verificar" instead of "base_oficial", since the base itself has no data for it.
+    base values (or con el override, si un superadmin cargó uno para ese NCM — en ese
+    caso el campo se marca "ajuste" en vez de "base_oficial", para el asterisco sutil
+    del front). DIE is overridden too, unless neither the base nor an override has it
+    (~950 positions, e.g. live animals) — in that case Gemini's estimated DIE is kept but
+    flagged "verificar" instead of "base_oficial", since there's no official data for it.
     `ganancias_pct` isn't in the base schema yet, so it always stays as Gemini's
     estimate. If the NCM isn't found at all, everything is left as Gemini's estimate,
     marked "estimado_ia" for the frontend to flag as "verificar".
     """
-    entry = lookup_ncm(classification.ncm)
-    if entry is None:
+    resolved = resolve_ncm(classification.ncm)
+    if resolved is None:
         return classification
+    entry, ajustados = resolved
 
     die_conocido = entry.die_aec is not None
     rates_update = {
@@ -114,11 +129,14 @@ def _apply_base_rates(classification: Classification) -> Classification:
         rates_update["derecho_importacion_pct"] = entry.die_aec
     rates = classification.rates.model_copy(update=rates_update)
 
+    def _fuente(campo: str, oficial: str) -> str:
+        return "ajuste" if ajustados.get(campo) else oficial
+
     rates_source = RateSource(
-        derecho_importacion="base_oficial" if die_conocido else "verificar",
-        tasa_estadistica="base_oficial",
-        iva="base_oficial",
-        iva_adicional="base_oficial",
+        derecho_importacion=_fuente("die_aec", "base_oficial" if die_conocido else "verificar"),
+        tasa_estadistica=_fuente("tasa_estadistica", "base_oficial"),
+        iva=_fuente("iva", "base_oficial"),
+        iva_adicional="ajuste" if (ajustados.get("iva") or ajustados.get("iva_reducido")) else "base_oficial",
         ganancias="estimado_ia",
     )
     return classification.model_copy(
@@ -332,3 +350,144 @@ def historial_detail(cotizacion_id: str, user: dict = Depends(get_current_user))
     if row is None:
         raise HTTPException(404, "Cotización no encontrada.")
     return HistorialDetail(**row)
+
+
+@router.post("/reclasificar", response_model=AnalyzeResponse)
+def reclasificar(req: ReclasificarRequest, user: dict = Depends(get_current_user)):
+    """Fase 5.4 — el usuario elige otro NCM para la cotización. Hace el lookup
+    oficial (base + overrides) de ese NCM y recalcula; no vuelve a llamar a
+    Gemini. Guarda una fila NUEVA en el historial (preserva el historial de la
+    cotización original)."""
+    resolved = resolve_ncm(req.ncm)
+    if resolved is None:
+        raise HTTPException(404, "Ese NCM no está en la base arancelaria oficial.")
+    entry, ajustados = resolved
+
+    die_conocido = entry.die_aec is not None
+    rates = Rates(
+        derecho_importacion_pct=entry.die_aec if die_conocido else 0.0,
+        tasa_estadistica_pct=entry.tasa_estadistica,
+        iva_pct=entry.iva,
+        iva_adicional_pct=0.0 if entry.iva == 0 else (10.0 if entry.iva_reducido else 20.0),
+    )
+
+    def _fuente(campo: str, oficial: str) -> str:
+        return "ajuste" if ajustados.get(campo) else oficial
+
+    rates_source = RateSource(
+        derecho_importacion=_fuente("die_aec", "base_oficial" if die_conocido else "verificar"),
+        tasa_estadistica=_fuente("tasa_estadistica", "base_oficial"),
+        iva=_fuente("iva", "base_oficial"),
+        iva_adicional="ajuste" if (ajustados.get("iva") or ajustados.get("iva_reducido")) else "base_oficial",
+        ganancias="estimado_ia",
+    )
+    classification = Classification(
+        ncm=format_ncm(entry.ncm),
+        description=entry.descripcion,
+        probability="alta",
+        rationale="Posición NCM elegida manualmente por el usuario (reclasificación).",
+        rates=rates,
+        requirements=[],
+        rates_source=rates_source,
+        base_match=True,
+        nota_base=entry.nota,
+        reclasificado_por_usuario=True,
+    )
+    cost_breakdown = compute_cost(req.cif, rates)
+
+    resp = AnalyzeResponse(
+        needs_clarification=False,
+        classifications=[classification],
+        cost_breakdown=cost_breakdown,
+        notes=[],
+        disclaimer=DISCLAIMER,
+        vigencia_base=VIGENCIA_BASE,
+    )
+    entrada = EntradaOriginal(
+        modo="text",
+        valor=f"Reclasificado a NCM {classification.ncm}",
+        cif=req.cif.cif_value,
+        moneda=req.cif.currency,
+        destino=req.cif.destino,
+    )
+    _guardar_historial(user, resp, fallback_producto=req.producto, entrada=entrada)
+    return resp
+
+
+@router.put("/historial/{cotizacion_id}/ajuste", response_model=HistorialDetail)
+def ajuste_manual(
+    cotizacion_id: str,
+    req: AjusteManualRequest,
+    user: dict = Depends(require_superadmin),
+):
+    """Fase 5.4 — corrección puntual a mano (solo superadmin): sobrescribe un
+    único número SOLO para esta cotización ya guardada (no afecta a otras).
+    Marca ajuste_manual=true y ese campo como fuente='ajuste' (asterisco
+    sutil), recalcula el costo landed y actualiza la MISMA fila del
+    historial (a diferencia de "Reclasificar", que preserva historial
+    creando una fila nueva)."""
+    campo_a_rate_source = {
+        "derecho_importacion_pct": "derecho_importacion",
+        "tasa_estadistica_pct": "tasa_estadistica",
+        "iva_pct": "iva",
+        "iva_adicional_pct": "iva_adicional",
+        "ganancias_pct": "ganancias",
+    }
+    if req.campo not in campo_a_rate_source:
+        raise HTTPException(400, f"Campo '{req.campo}' inválido.")
+
+    try:
+        UUID(cotizacion_id)
+    except ValueError:
+        raise HTTPException(404, "Cotización no encontrada.")
+
+    try:
+        row = obtener_cotizacion_admin(cotizacion_id=cotizacion_id)
+    except Exception as e:
+        raise HTTPException(502, f"No se pudo leer la cotización: {e}")
+    if row is None:
+        raise HTTPException(404, "Cotización no encontrada.")
+
+    resultado = row["resultado"]
+    classifications = resultado.get("classifications") or []
+    if not classifications:
+        raise HTTPException(400, "Esta cotización no tiene una clasificación para corregir.")
+
+    primary = dict(classifications[0])
+    rates = dict(primary.get("rates") or {})
+    rates_source = dict(primary.get("rates_source") or {})
+    rates[req.campo] = req.valor
+    rates_source[campo_a_rate_source[req.campo]] = "ajuste"
+    primary["rates"] = rates
+    primary["rates_source"] = rates_source
+    primary["ajuste_manual"] = True
+    classifications[0] = primary
+    resultado["classifications"] = classifications
+
+    cost_breakdown_prev = resultado.get("cost_breakdown") or {}
+    entrada = resultado.get("entrada") or {}
+    base_iva = cost_breakdown_prev.get("base_iva") or 0.0
+    iibb_pct = (
+        (cost_breakdown_prev.get("iibb", 0.0) / base_iva * 100.0) if base_iva else 0.0
+    )
+    cif = CifInputs(
+        cif_value=cost_breakdown_prev.get("cif_value", 0.0),
+        currency=cost_breakdown_prev.get("currency", "USD"),
+        destino=entrada.get("destino", "bien_cambio"),
+        iibb_pct=iibb_pct,
+    )
+    nuevo_cost_breakdown = compute_cost(cif, Rates(**rates))
+    resultado["cost_breakdown"] = nuevo_cost_breakdown.model_dump()
+
+    fuente_nueva = None
+    if req.campo == "derecho_importacion_pct":
+        fuente_nueva = "ajuste"
+
+    try:
+        updated_row = actualizar_cotizacion(
+            cotizacion_id=cotizacion_id, fuente=fuente_nueva, resultado=resultado
+        )
+    except Exception as e:
+        raise HTTPException(502, f"No se pudo guardar la corrección: {e}")
+
+    return HistorialDetail(**updated_row)

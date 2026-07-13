@@ -78,3 +78,39 @@ def obtener_cotizacion(*, user_id: str, cotizacion_id: str) -> Optional[Dict[str
     resp.raise_for_status()
     rows = resp.json()
     return rows[0] if rows else None
+
+
+def obtener_cotizacion_admin(*, cotizacion_id: str) -> Optional[Dict[str, Any]]:
+    """Como obtener_cotizacion, pero sin filtrar por user_id — solo para la
+    corrección puntual a mano (fase 5.4, solo superadmin), que puede corregir
+    la cotización de cualquier usuario."""
+    _require_config()
+    params = {"select": "*", "id": f"eq.{cotizacion_id}", "limit": 1}
+    resp = httpx.get(_TABLE_URL, headers=_headers(), params=params, timeout=10)
+    resp.raise_for_status()
+    rows = resp.json()
+    return rows[0] if rows else None
+
+
+def actualizar_cotizacion(
+    *, cotizacion_id: str, fuente: Optional[str], resultado: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Sobrescribe fuente/resultado de una fila ya existente (fase 5.4:
+    corrección puntual a mano). A diferencia de guardar_cotizacion (siempre
+    inserta fila nueva, preserva historial), esto modifica la MISMA fila."""
+    _require_config()
+    row: Dict[str, Any] = {"resultado": resultado}
+    if fuente is not None:
+        row["fuente"] = fuente
+    resp = httpx.patch(
+        _TABLE_URL,
+        headers=_headers(Prefer="return=representation"),
+        params={"id": f"eq.{cotizacion_id}"},
+        json=row,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if not rows:
+        raise RuntimeError("Cotización no encontrada al actualizar.")
+    return rows[0]

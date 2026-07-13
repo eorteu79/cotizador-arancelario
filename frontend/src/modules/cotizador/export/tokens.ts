@@ -16,21 +16,25 @@ export const COLORS = {
   faint: "#9AA0AA",
 } as const;
 
-/** Fondos tenues para los badges de fuente (verde/ámbar/borgoña), tomados
- * directo del Excel de referencia (tinte ~8-10% del color sobre blanco). */
-export const BADGE_FILL: Record<"base" | "estimado" | "sin_dato", string> = {
+/** Fondos tenues para los badges de fuente (verde/ámbar/borgoña/oro), tomados
+ * directo del Excel de referencia (tinte ~8-10% del color sobre blanco).
+ * 'ajuste' (fase 5.4: override o corrección manual de un superadmin) usa oro
+ * — el mismo tono de marca, no un color nuevo fuera de la paleta. */
+export const BADGE_FILL: Record<"base" | "estimado" | "sin_dato" | "ajuste", string> = {
   base: "#EDF2E6",
   estimado: "#F7F0DE",
   sin_dato: "#F2EAEB",
+  ajuste: "#F7EFDD",
 };
 
 export const FUENTE_BADGE: Record<
-  "base" | "estimado" | "sin_dato",
+  "base" | "estimado" | "sin_dato" | "ajuste",
   { label: string; color: string }
 > = {
   base: { label: "BASE OFICIAL", color: COLORS.green },
   estimado: { label: "ESTIMADO IA", color: COLORS.amber },
   sin_dato: { label: "VERIFICAR", color: COLORS.burgundy },
+  ajuste: { label: "AJUSTADO TAILWIND", color: COLORS.gold },
 };
 
 export const RATE_CARD_COLOR: Record<"navy" | "gold" | "burg", string> = {

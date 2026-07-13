@@ -17,6 +17,7 @@ from .schemas import (
     CifInputs,
     Classification,
     ClarificationQuestion,
+    EntradaOriginal,
     HistorialDetail,
     HistorialItem,
     HistorialListResponse,
@@ -40,9 +41,18 @@ FUENTE_BY_RATE_SOURCE = {
 }
 
 
-def _guardar_historial(user: dict, resp: AnalyzeResponse, fallback_producto: str) -> None:
+def _guardar_historial(
+    user: dict,
+    resp: AnalyzeResponse,
+    fallback_producto: str,
+    entrada: Optional[EntradaOriginal] = None,
+) -> None:
     """Guarda la cotización final en el historial. No debe romper la respuesta
-    al usuario si falla (Supabase caído, RLS mal configurado, etc.)."""
+    al usuario si falla (Supabase caído, RLS mal configurado, etc.).
+
+    `entrada` (solo para modos text/url) va embebida en el jsonb `resultado`,
+    no en una columna nueva, para que "Retomar" pueda reconstruir la consulta
+    original exacta en vez de un best-effort."""
     if resp.needs_clarification or not resp.classifications:
         return
     user_id = user.get("sub")
@@ -56,7 +66,10 @@ def _guardar_historial(user: dict, resp: AnalyzeResponse, fallback_producto: str
             producto=producto,
             ncm=primary.ncm,
             fuente=FUENTE_BY_RATE_SOURCE.get(primary.rates_source.derecho_importacion, "estimado"),
-            resultado=resp.model_dump(),
+            resultado={
+                **resp.model_dump(),
+                "entrada": entrada.model_dump() if entrada else None,
+            },
         )
     except Exception:
         logger.exception("No se pudo guardar la cotización en el historial.")
@@ -188,7 +201,18 @@ def analyze_json(req: AnalyzeRequest, user: dict = Depends(get_current_user)):
         raise HTTPException(500, f"Error al consultar Gemini: {e}")
 
     resp = _build_response(parsed, req.cif)
-    _guardar_historial(user, resp, fallback_producto=(req.text or req.url or "Consulta"))
+    entrada = None
+    if req.cif is not None:
+        entrada = EntradaOriginal(
+            modo=req.mode,
+            valor=(req.text if req.mode == "text" else req.url) or "",
+            cif=req.cif.cif_value,
+            moneda=req.cif.currency,
+            destino=req.cif.destino,
+        )
+    _guardar_historial(
+        user, resp, fallback_producto=(req.text or req.url or "Consulta"), entrada=entrada
+    )
     return resp
 
 

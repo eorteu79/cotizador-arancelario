@@ -126,12 +126,25 @@ class AnalyzeResponse(BaseModel):
     vigencia_base: str = ""
 
 
+class EntradaOriginal(BaseModel):
+    """Input original de una cotización guardada en modo texto o url — permite que
+    "Retomar" en el historial sea exacto en vez de best-effort. No se guarda para
+    pdf/image."""
+
+    modo: str = Field(..., description="text | url")
+    valor: str = Field(..., description="El texto escrito o la URL analizada")
+    cif: float
+    moneda: str
+    destino: str
+
+
 class HistorialItem(BaseModel):
     id: str
     created_at: str
     producto: str
     ncm: Optional[str] = None
     fuente: str
+    entrada: Optional[EntradaOriginal] = None
 
 
 class HistorialListResponse(BaseModel):
@@ -140,10 +153,18 @@ class HistorialListResponse(BaseModel):
     offset: int
 
 
+class HistorialResultado(AnalyzeResponse):
+    """El AnalyzeResponse tal como se guardó, más la entrada original (si la hay).
+    Solo se usa para el jsonb de historial — el AnalyzeResponse que devuelve
+    /analyze en vivo no incluye este campo."""
+
+    entrada: Optional[EntradaOriginal] = None
+
+
 class HistorialDetail(BaseModel):
     id: str
     created_at: str
     producto: str
     ncm: Optional[str] = None
     fuente: str
-    resultado: AnalyzeResponse
+    resultado: HistorialResultado

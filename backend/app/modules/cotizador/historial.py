@@ -50,7 +50,10 @@ def guardar_cotizacion(
 def listar_cotizaciones(*, user_id: str, limit: int, offset: int) -> List[Dict[str, Any]]:
     _require_config()
     params = {
-        "select": "id,created_at,producto,ncm,fuente",
+        # entrada se extrae del jsonb resultado (PostgREST: alias:columna->path) en
+        # vez de traer el resultado completo por fila — la lista solo necesita el
+        # resumen + la consulta original, no las clasificaciones/costos.
+        "select": "id,created_at,producto,ncm,fuente,entrada:resultado->entrada",
         "user_id": f"eq.{user_id}",
         "order": "created_at.desc",
         "limit": limit,

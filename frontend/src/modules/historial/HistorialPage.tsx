@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Results } from "../cotizador/CotizadorPage";
-import type { CifInputs } from "../cotizador/types";
+import { IIBB_DEFAULT_BY_DESTINO } from "../cotizador/constants";
+import type { CifInputs, Destino } from "../cotizador/types";
 import { getHistorialDetail, listHistorial } from "./api";
 import type { HistorialDetail, HistorialItem } from "./types";
 
@@ -92,6 +93,29 @@ export default function HistorialPage() {
   function onRetomar() {
     if (!showingDetail) return;
     const { resultado } = showingDetail;
+    const { entrada } = resultado;
+
+    if (entrada) {
+      const destino = entrada.destino as Destino;
+      navigate("/cotizador", {
+        state: {
+          retomar: {
+            mode: entrada.modo,
+            text: entrada.modo === "text" ? entrada.valor : "",
+            url: entrada.modo === "url" ? entrada.valor : "",
+            cif: {
+              cif_value: entrada.cif,
+              currency: entrada.moneda,
+              destino,
+              iibb_pct: IIBB_DEFAULT_BY_DESTINO[destino] ?? 2.5,
+            },
+          },
+        },
+      });
+      return;
+    }
+
+    // Sin entrada guardada (pdf/foto): best-effort a partir del resultado.
     const primary = resultado.classifications[0];
     const text =
       resultado.product?.summary ??
@@ -142,6 +166,31 @@ export default function HistorialPage() {
                 Retomar en el cotizador
               </button>
             </div>
+
+            {showingDetail.resultado.entrada && (
+              <div className="card">
+                <div className="sec-h">
+                  <span className="n">00</span>
+                  <h2>Consulta original</h2>
+                </div>
+                {showingDetail.resultado.entrada.modo === "url" ? (
+                  <p>
+                    <a
+                      href={showingDetail.resultado.entrada.valor}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {showingDetail.resultado.entrada.valor}
+                    </a>
+                  </p>
+                ) : (
+                  <p style={{ whiteSpace: "pre-wrap" }}>
+                    {showingDetail.resultado.entrada.valor}
+                  </p>
+                )}
+              </div>
+            )}
+
             <Results result={showingDetail.resultado} />
           </>
         )}
@@ -185,7 +234,15 @@ export default function HistorialPage() {
                   onClick={() => setSelectedId(it.id)}
                 >
                   <span className="hist-fecha">{fmtFecha(it.created_at)}</span>
-                  <span className="hist-producto">{truncar(it.producto)}</span>
+                  <span className="hist-producto-col">
+                    <span className="hist-producto">{truncar(it.producto)}</span>
+                    {it.entrada && (
+                      <span className="hist-entrada">
+                        {it.entrada.modo === "url" ? "URL: " : "Texto: "}
+                        {truncar(it.entrada.valor, 80)}
+                      </span>
+                    )}
+                  </span>
                   <span className="hist-ncm">{it.ncm ?? "—"}</span>
                   <FuenteBadge fuente={it.fuente} />
                 </button>

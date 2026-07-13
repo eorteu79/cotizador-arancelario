@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { analyze, health } from "./api";
+import { IIBB_DEFAULT_BY_DESTINO } from "./constants";
 import type {
   AnalyzeResponse,
   CifInputs,
@@ -21,11 +22,6 @@ const MODE_LABELS: Record<Mode, string> = {
   image: "Foto",
 };
 
-const IIBB_DEFAULT_BY_DESTINO: Record<Destino, number> = {
-  bien_cambio: 2.5,
-  bien_uso: 0,
-};
-
 function defaultCif(): CifInputs {
   return {
     cif_value: 100,
@@ -39,9 +35,9 @@ export default function CotizadorPage() {
   const location = useLocation();
   const retomar = (location.state as Partial<RetomarState> | null)?.retomar;
 
-  const [mode, setMode] = useState<Mode>("text");
+  const [mode, setMode] = useState<Mode>(retomar?.mode ?? "text");
   const [text, setText] = useState(retomar?.text ?? "");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(retomar?.url ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [cif, setCif] = useState<CifInputs>(retomar?.cif ?? defaultCif());
   const [loading, setLoading] = useState(false);
@@ -112,8 +108,12 @@ export default function CotizadorPage() {
 
       {retomar && (
         <div className="alert alert-warning">
-          Retomaste una cotización del historial. Revisá los datos precargados (la
-          descripción se generó a partir del resultado guardado) y volvé a analizar.
+          {retomar.mode ? (
+            "Retomaste una cotización del historial con la consulta original. Revisá los datos y volvé a analizar."
+          ) : (
+            "Retomaste una cotización del historial. Como el original era un PDF o una foto, la " +
+            "descripción se generó a partir del resultado guardado — revisala y volvé a analizar."
+          )}
         </div>
       )}
 

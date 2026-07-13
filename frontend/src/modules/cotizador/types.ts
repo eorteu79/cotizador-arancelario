@@ -88,11 +88,14 @@ export interface AnalyzeResponse {
 }
 
 /** Router `location.state` shape used by the "Retomar" button in /historial to
- * prefill the cotizador with a past query (best-effort: the stored resultado
- * doesn't keep the original mode/text/url/file, only the response). */
+ * prefill the cotizador with a past query. For text/url cotizaciones the stored
+ * "entrada" makes this exact (mode + original value); for pdf/foto (no entrada
+ * saved) it falls back to a best-effort text built from the stored result. */
 export interface RetomarState {
   retomar: {
-    text: string;
-    cif: CifInputs;
+    mode?: Mode;
+    text?: string;
+    url?: string;
+    cif?: CifInputs;
   };
 }

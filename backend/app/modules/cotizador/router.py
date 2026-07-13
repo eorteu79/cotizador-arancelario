@@ -42,13 +42,15 @@ logger = logging.getLogger(__name__)
 # Un único campo (derecho_importacion) alcanza para derivar el badge de origen de
 # toda la cotización: es el único que _apply_base_rates puede marcar "verificar"
 # (sin dato en la base para esa posición); los demás son siempre base_oficial o
-# estimado_ia junto con él. 'ajuste' (fase 5.4) se agrega cuando ese campo viene
-# de un override o de una reclasificación/corrección manual.
+# estimado_ia junto con él. 'ajuste' (fase 5.4: override o corrección manual)
+# NO tiene un badge de fuente propio a este nivel — mapea a "base" porque un
+# override solo existe sobre un NCM ya encontrado en la base; la señal de que
+# hay un ajuste queda solo en el asterisco + nota al pie por campo (rates_source).
 FUENTE_BY_RATE_SOURCE = {
     "base_oficial": "base",
     "verificar": "sin_dato",
     "estimado_ia": "estimado",
-    "ajuste": "ajuste",
+    "ajuste": "base",
 }
 
 
@@ -479,13 +481,12 @@ def ajuste_manual(
     nuevo_cost_breakdown = compute_cost(cif, Rates(**rates))
     resultado["cost_breakdown"] = nuevo_cost_breakdown.model_dump()
 
-    fuente_nueva = None
-    if req.campo == "derecho_importacion_pct":
-        fuente_nueva = "ajuste"
-
+    # La columna `fuente` de nivel-cotización no cambia por un ajuste puntual
+    # (fase 5.4: sin badge de color nuevo a ese nivel) — la señal queda solo
+    # en el asterisco + nota al pie por campo, vía rates_source.
     try:
         updated_row = actualizar_cotizacion(
-            cotizacion_id=cotizacion_id, fuente=fuente_nueva, resultado=resultado
+            cotizacion_id=cotizacion_id, fuente=None, resultado=resultado
         )
     except Exception as e:
         raise HTTPException(502, f"No se pudo guardar la corrección: {e}")

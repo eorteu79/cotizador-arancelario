@@ -3,12 +3,13 @@ import type { AnalyzeResponse, CifInputs, Classification, CostBreakdown, RateFie
 import type { DesgloseRow, ExportData, Fuente, RateCardData } from "./types";
 
 /** Mismo criterio que el backend (router.py FUENTE_BY_RATE_SOURCE) para no
- * divergir sobre qué badge mostrar. */
+ * divergir sobre qué badge mostrar. 'ajuste' mapea a "base" — no tiene badge
+ * de color propio a este nivel (fase 5.4: solo asterisco + nota al pie). */
 const FUENTE_BY_RATE_SOURCE: Record<RateFieldSource, Fuente> = {
   base_oficial: "base",
   verificar: "sin_dato",
   estimado_ia: "estimado",
-  ajuste: "ajuste",
+  ajuste: "base",
 };
 
 const DESTINO_LABEL: Record<string, string> = {

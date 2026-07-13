@@ -3,7 +3,7 @@ import type { Destino } from "../types";
 /** Badge de procedencia de un dato: viene de la base arancelaria oficial, es un
  * estimado del modelo, o la base no tiene el dato y también se estima. Mismo
  * mapeo que usa el backend (FUENTE_BY_RATE_SOURCE) para no duplicar criterios. */
-export type Fuente = "base" | "estimado" | "sin_dato" | "ajuste";
+export type Fuente = "base" | "estimado" | "sin_dato";
 
 export interface RateCardData {
   key: "di" | "te" | "iva" | "iva_adicional" | "ganancias";

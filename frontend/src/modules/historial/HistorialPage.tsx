@@ -15,14 +15,12 @@ const FUENTE_LABEL: Record<HistorialItem["fuente"], string> = {
   base: "Base oficial",
   estimado: "Estimado IA",
   sin_dato: "Sin dato — verificar",
-  ajuste: "Ajustado — Tailwind",
 };
 
 const FUENTE_CLASS: Record<HistorialItem["fuente"], string> = {
   base: "src-tag src-base",
   estimado: "src-tag src-ia",
   sin_dato: "src-tag src-verificar",
-  ajuste: "src-tag src-ajuste",
 };
 
 function FuenteBadge({ fuente }: { fuente: HistorialItem["fuente"] }) {

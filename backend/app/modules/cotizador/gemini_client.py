@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import os
 import time
@@ -11,6 +12,7 @@ from google.genai import errors, types
 
 from .prompts import get_active_prompt
 
+logger = logging.getLogger(__name__)
 
 _client: Optional[genai.Client] = None
 
@@ -22,6 +24,15 @@ USER_AGENT = "Mozilla/5.0 (compatible; ImportCostBot/1.0; +https://localhost)"
 RETRYABLE_CODES = {429, 500, 503}
 MAX_RETRIES = 3
 RETRY_BASE_DELAY_S = 2.0
+
+# Recordatorio breve para el único reintento cuando la primera respuesta no
+# trae JSON parseable (Gemini a veces vuelve con finish_reason=STOP pero sin
+# ningún part de contenido, o con texto/narración de tool_code antes del JSON).
+_JSON_RETRY_REMINDER = (
+    "\n\n---\nTu respuesta anterior no contenía un bloque JSON parseable "
+    "(pudo haber venido vacía o con texto adicional). Respondé de nuevo con "
+    "ÚNICAMENTE el bloque ```json``` pedido, sin texto antes ni después."
+)
 
 
 def get_client() -> genai.Client:
@@ -126,8 +137,10 @@ def build_user_content(
     return parts
 
 
-def call_gemini(parts: List[Any]) -> str:
-    """Call Gemini with Google Search grounding enabled. Returns the final text.
+def call_gemini(parts: List[Any]) -> Any:
+    """Call Gemini with Google Search grounding enabled. Returns the raw
+    GenerateContentResponse (not just the text) so the caller can inspect
+    finish_reason/usage when the text comes back empty or unparseable.
 
     Retries with exponential backoff on transient errors (429 rate limit, 500/503
     server overload) — Gemini Flash regularly returns 503 UNAVAILABLE under demand
@@ -143,12 +156,11 @@ def call_gemini(parts: List[Any]) -> str:
     last_error: Optional[errors.APIError] = None
     for attempt in range(MAX_RETRIES):
         try:
-            response = client.models.generate_content(
+            return client.models.generate_content(
                 model=MODEL,
                 contents=parts,
                 config=config,
             )
-            return response.text or ""
         except errors.APIError as e:
             last_error = e
             if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES - 1:
@@ -158,22 +170,90 @@ def call_gemini(parts: List[Any]) -> str:
     raise last_error  # pragma: no cover — loop always returns or raises above
 
 
+def _response_text(response: Any) -> str:
+    try:
+        return response.text or ""
+    except Exception:
+        return ""
+
+
+def _log_unparseable_response(response: Any, label: str, text: str) -> None:
+    """Logueo de diagnóstico con la respuesta cruda de Gemini, para los casos en
+    que no se pudo sacar JSON de ella (finish_reason distinto de STOP, candidate
+    sin ningún part de contenido, truncamiento, etc.)."""
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        cand = candidates[0] if candidates else None
+        finish_reason = getattr(cand, "finish_reason", None)
+        usage = getattr(response, "usage_metadata", None)
+        logger.warning(
+            "Gemini (%s): respuesta sin JSON parseable. finish_reason=%s "
+            "text_len=%d candidates_tokens=%s thoughts_tokens=%s total_tokens=%s "
+            "text_preview=%r",
+            label,
+            finish_reason,
+            len(text),
+            getattr(usage, "candidates_token_count", None),
+            getattr(usage, "thoughts_token_count", None),
+            getattr(usage, "total_token_count", None),
+            text[:1000],
+        )
+    except Exception:
+        logger.exception("No se pudo loguear la respuesta cruda de Gemini (%s).", label)
+
+
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
+def _last_balanced_json_object(text: str) -> Optional[str]:
+    """Escanea el texto entero y devuelve el ÚLTIMO objeto {...} de nivel
+    superior balanceado (respeta llaves dentro de strings, para no cortar en
+    medio de una descripción que contenga "{" o "}" literales)."""
+    last_span: Optional[tuple] = None
+    depth = 0
+    start = None
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    last_span = (start, i + 1)
+    if last_span:
+        return text[last_span[0]:last_span[1]]
+    return None
+
+
 def extract_json(text: str) -> Optional[Dict[str, Any]]:
+    """Tolerante a envoltorios: prueba, en orden, el ÚLTIMO bloque ```json```
+    fenced (un modelo puede narrar tool_code o pensamiento con JSON de ejemplo
+    antes de la respuesta final) y, si no hay uno parseable, el último objeto
+    {...} balanceado en todo el texto."""
     if not text:
         return None
-    m = _JSON_FENCE.search(text)
-    if m:
+    fences = _JSON_FENCE.findall(text)
+    for candidate in reversed(fences):
         try:
-            return json.loads(m.group(1))
+            return json.loads(candidate)
         except Exception:
-            pass
-    first = text.find("{")
-    last = text.rfind("}")
-    if first != -1 and last > first:
-        candidate = text[first:last + 1]
+            continue
+    candidate = _last_balanced_json_object(text)
+    if candidate:
         try:
             return json.loads(candidate)
         except Exception:
@@ -199,8 +279,21 @@ def analyze_product(
         image_media_type=image_media_type,
         clarifications=clarifications or [],
     )
-    final_text = call_gemini(parts)
+    response = call_gemini(parts)
+    final_text = _response_text(response)
     parsed = extract_json(final_text)
+
+    if parsed is None:
+        _log_unparseable_response(response, "primer intento", final_text)
+        retry_response = call_gemini(parts + [_JSON_RETRY_REMINDER])
+        retry_text = _response_text(retry_response)
+        retry_parsed = extract_json(retry_text)
+        if retry_parsed is not None:
+            return retry_parsed
+        _log_unparseable_response(retry_response, "reintento", retry_text)
+        final_text = retry_text or final_text
+        parsed = None
+
     if parsed is None:
         return {
             "needs_clarification": False,
